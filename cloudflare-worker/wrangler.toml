@@ -1,0 +1,16 @@
+name = "news-summarizer"
+main = "src/index_naver.js"
+compatibility_date = "2024-01-01"
+
+# Cloudflare Workers AI 활성화
+[ai]
+binding = "AI"
+
+# 환경변수 (Supabase 연결 정보)
+[vars]
+# wrangler secret put SUPABASE_URL
+# wrangler secret put SUPABASE_ANON_KEY
+
+# 크론 잡 설정 (5분마다 뉴스 수집)
+[triggers]
+crons = ["*/5 * * * *"]

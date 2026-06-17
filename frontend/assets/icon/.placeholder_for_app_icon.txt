@@ -1,0 +1,15 @@
+여기에 app_icon.png 파일을 넣어주세요!
+
+요구사항:
+- 파일명: app_icon.png
+- 크기: 1024 x 1024 픽셀
+- 포맷: PNG (24-bit 또는 32-bit)
+
+SVG를 PNG로 변환:
+https://cloudconvert.com/svg-to-png
+
+변환 후 이 폴더에 app_icon.png로 저장하고
+다음 명령어를 실행하세요:
+
+cd frontend
+flutter pub run flutter_launcher_icons
