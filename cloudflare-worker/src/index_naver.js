@@ -12,7 +12,7 @@ const NAVER_CATEGORIES = {
 };
 
 const CATEGORY_SEARCH_TERMS = {
-  '경제': ['경제', '주식', '증시', '환율', '금리'],
+  '경제': ['경제', '주식', '증시', '환율', '금리', '코스피', '코스닥', '미국증시', '기업실적', '실적발표', '달러', '채권'],
   '세계': ['세계', '국제', '미국', '중국', '유럽'],
   '사회': ['사회', '사건', '사고', '범죄', '재난'],
   '정치': ['정치', '국회', '대통령', '선거', '법안'],
@@ -24,7 +24,7 @@ const MAX_ANALYSIS_PER_RUN = 4;
 const MAX_SEARCH_TERMS_PER_RUN = 2;
 const MAX_ARTICLE_AGE_HOURS = 12;
 const ANALYSIS_PAUSE_MS = 250;
-const NAVER_DISPLAY_COUNT = 20;
+const NAVER_DISPLAY_COUNT = 30;
 
 const VALID_CATEGORIES = ['경제', '세계', '사회', '정치', '생활/문화', 'IT/과학'];
 
@@ -200,7 +200,10 @@ async function collectAllNews(env) {
   const categoryIndex = Math.floor(now.getMinutes() / 5) % categories.length;
   const currentCategory = categories[categoryIndex];
   const allSearchTerms = CATEGORY_SEARCH_TERMS[currentCategory] || [NAVER_CATEGORIES[currentCategory]];
-  const searchTerms = pickSearchTermsForThisRun(allSearchTerms, now, MAX_SEARCH_TERMS_PER_RUN);
+  const searchTermCount = currentCategory === '경제'
+    ? Math.min(4, allSearchTerms.length)
+    : MAX_SEARCH_TERMS_PER_RUN;
+  const searchTerms = pickSearchTermsForThisRun(allSearchTerms, now, searchTermCount);
 
   console.log(`Processing category[${categoryIndex + 1}/${categories.length}]: ${currentCategory} `);
 
@@ -216,7 +219,7 @@ async function collectAllNews(env) {
     const fetchedBuckets = [];
 
     for (const term of searchTerms) {
-      const bucket = await fetchNaverNews(term, env, 10);
+      const bucket = await fetchNaverNews(term, env, currentCategory === '경제' ? 15 : 10);
       fetchedBuckets.push(bucket);
     }
 
