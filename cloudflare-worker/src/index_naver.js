@@ -36,7 +36,7 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 
     if (request.method === 'OPTIONS') {
@@ -81,8 +81,8 @@ export default {
         return await handleGetTrendDetail(id, env, corsHeaders);
       }
 
-      if (path === '/api/scheduler/trigger') {
-        return await handleTriggerCollection(url, env, corsHeaders);
+      if (path === '/api/scheduler/trigger' && request.method === 'POST') {
+        return await handleTriggerCollection(request, env, corsHeaders);
       }
 
       if (path === '/api/fear-and-greed' && request.method === 'GET') {
@@ -356,16 +356,18 @@ async function handleGetNewsByKeyword(url, env, corsHeaders) {
   }, corsHeaders);
 }
 
-async function handleTriggerCollection(url, env, corsHeaders) {
+async function handleTriggerCollection(request, env, corsHeaders) {
   console.log('=== Manual trigger requested ===');
 
-  // SCHEDULER_SECRET이 설정된 경우에만 토큰 검증을 수행한다.
-  // 기존 환경변수가 없다면 기존처럼 그대로 동작한다.
-  if (env.SCHEDULER_SECRET) {
-    const token = url.searchParams.get('token');
-    if (token !== env.SCHEDULER_SECRET) {
-      return jsonResponse({ success: false, error: 'Unauthorized' }, corsHeaders, 401);
-    }
+  if (!env.SCHEDULER_SECRET) {
+    console.error('Missing SCHEDULER_SECRET');
+    return jsonResponse({ success: false, error: 'Manual trigger is disabled' }, corsHeaders, 503);
+  }
+
+  const authorization = request.headers.get('Authorization') || '';
+  const expectedAuthorization = `Bearer ${env.SCHEDULER_SECRET}`;
+  if (authorization !== expectedAuthorization) {
+    return jsonResponse({ success: false, error: 'Unauthorized' }, corsHeaders, 401);
   }
 
   if (!env.NAVER_CLIENT_ID || !env.NAVER_CLIENT_SECRET) {

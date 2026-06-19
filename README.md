@@ -78,7 +78,9 @@ BangProject/
 
 **수동 트리거:**
 ```bash
-curl -X POST https://news-summarizer.bum2432.workers.dev/api/scheduler/trigger
+curl -X POST \
+  -H "Authorization: Bearer $SCHEDULER_SECRET" \
+  https://news-summarizer.bum2432.workers.dev/api/scheduler/trigger
 ```
 
 ### 방법 2: Python 백엔드 실행
@@ -248,6 +250,13 @@ CREATE INDEX idx_category ON trends(category);
 
 ### POST /api/scheduler/trigger
 수동 수집 트리거
+
+Cloudflare Worker에 `SCHEDULER_SECRET`을 등록하고 Bearer 토큰으로 호출해야 합니다.
+
+```bash
+cd cloudflare-worker
+wrangler secret put SCHEDULER_SECRET
+```
 
 **응답:**
 ```json

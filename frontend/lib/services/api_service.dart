@@ -226,21 +226,6 @@ class ApiService {
     }
   }
 
-  /// 수동으로 트렌드 수집 실행
-  Future<bool> triggerCollection() async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/scheduler/trigger'),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 5));
-
-      return response.statusCode == 200;
-    } catch (e) {
-      print('API Error: $e');
-      return false;
-    }
-  }
-
   Future<Map<String, dynamic>> _getJson(Uri uri) async {
     final response = await http.get(
       uri,

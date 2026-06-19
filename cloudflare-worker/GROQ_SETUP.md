@@ -58,7 +58,9 @@ Quick Edit에서 `index.js` 코드를 최신 버전으로 교체 후 **Save and 
 ## ✅ 테스트
 
 ```bash
-curl -X POST https://news-summarizer.bum2432.workers.dev/api/scheduler/trigger
+curl -X POST \
+  -H "Authorization: Bearer $SCHEDULER_SECRET" \
+  https://news-summarizer.bum2432.workers.dev/api/scheduler/trigger
 ```
 
 Logs 탭에서 정상 작동 확인

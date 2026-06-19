@@ -92,7 +92,9 @@ class ApiService {
 
 수동 트리거:
 ```bash
-curl -X POST https://trend-aggregator.YOUR_SUBDOMAIN.workers.dev/api/scheduler/trigger
+curl -X POST \
+  -H "Authorization: Bearer $SCHEDULER_SECRET" \
+  https://trend-aggregator.YOUR_SUBDOMAIN.workers.dev/api/scheduler/trigger
 ```
 
 ---

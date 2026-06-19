@@ -1,4 +1,4 @@
-package com.example.bang_project_frontend
+package com.pulselab.pulse
 
 import io.flutter.embedding.android.FlutterActivity
 
