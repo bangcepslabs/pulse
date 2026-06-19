@@ -25,7 +25,7 @@ $password = [Convert]::ToBase64String($passwordBytes)
     -keyalg RSA `
     -keysize 2048 `
     -validity 10000 `
-    -dname 'CN=Pulse Lab, OU=Mobile, O=Pulse Lab, L=Seoul, ST=Seoul, C=KR'
+    -dname 'CN=Bangceps Labs, OU=Mobile, O=Bangceps Labs, L=Seoul, ST=Seoul, C=KR'
 
 if ($LASTEXITCODE -ne 0) {
     throw "keytool failed with exit code $LASTEXITCODE"
