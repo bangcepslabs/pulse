@@ -27,6 +27,7 @@ obj/
 
 # Flutter/Dart
 .dart_tool/
+.dart-local/
 .packages
 build/
 .flutter-plugins

@@ -56,6 +56,26 @@ export default {
         return await handleGetTrends(url, env, corsHeaders);
       }
 
+      if (path === '/api/trends/keywords' && request.method === 'GET') {
+        return await handleGetTrendKeywords(url, env, corsHeaders);
+      }
+
+      if (path === '/api/trends/rising' && request.method === 'GET') {
+        return await handleGetRisingIssues(url, env, corsHeaders);
+      }
+
+      if (path === '/api/trends/sentiment' && request.method === 'GET') {
+        return await handleGetTrendSentiment(url, env, corsHeaders);
+      }
+
+      if (path === '/api/news/search' && request.method === 'GET') {
+        return await handleSearchNews(url, env, corsHeaders);
+      }
+
+      if (path === '/api/news/by-keyword' && request.method === 'GET') {
+        return await handleGetNewsByKeyword(url, env, corsHeaders);
+      }
+
       if (path.match(/^\/api\/trends\/\d+$/)) {
         const id = parseInt(path.split('/').pop(), 10);
         return await handleGetTrendDetail(id, env, corsHeaders);
@@ -67,6 +87,18 @@ export default {
 
       if (path === '/api/fear-and-greed' && request.method === 'GET') {
         return await handleGetFearAndGreed(corsHeaders);
+      }
+
+      if (path === '/api/fear-greed/stock' && request.method === 'GET') {
+        return await handleGetStockFearGreed(corsHeaders);
+      }
+
+      if (path === '/api/fear-greed/crypto' && request.method === 'GET') {
+        return await handleGetCryptoFearGreed(corsHeaders);
+      }
+
+      if (path === '/api/fear-greed/stock/ai-score' && request.method === 'GET') {
+        return await handleGetAiStockSentiment(url, env, corsHeaders);
       }
 
       if (path === '/api/market-data' && request.method === 'GET') {
@@ -158,6 +190,170 @@ async function handleGetTrendDetail(id, env, corsHeaders) {
   });
 
   return jsonResponse({ success: true, data }, corsHeaders);
+}
+
+async function handleGetTrendKeywords(url, env, corsHeaders) {
+  const period = normalizePeriod(url.searchParams.get('period') || '24h');
+  const category = url.searchParams.get('category') || '';
+  const limit = clampNumber(parseInt(url.searchParams.get('limit') || '10', 10), 1, 50);
+  const hours = periodToHours(period);
+  const trends = await getRecentTrends(env, hours, category, 500);
+  const keywords = buildKeywordStats(trends)
+    .slice(0, limit)
+    .map((item, index) => ({
+      keyword: item.keyword,
+      category: item.category,
+      newsCount: item.newsCount,
+      rank: index + 1,
+      score: item.score,
+      representativeTitle: item.representativeTitle,
+      sentimentTemperature: calculateSentimentTemperature(item.news),
+    }));
+
+  return jsonResponse({
+    success: true,
+    period,
+    category,
+    items: keywords,
+  }, corsHeaders);
+}
+
+async function handleGetRisingIssues(url, env, corsHeaders) {
+  const period = normalizePeriod(url.searchParams.get('period') || '1h');
+  const category = url.searchParams.get('category') || '';
+  const limit = clampNumber(parseInt(url.searchParams.get('limit') || '5', 10), 1, 30);
+  const minCount = clampNumber(parseInt(url.searchParams.get('min_count') || '3', 10), 1, 20);
+  const hours = periodToHours(period);
+  const now = Date.now();
+  const trends = await getRecentTrends(env, hours * 2, category, 800);
+
+  const current = trends.filter(row => trendTimestamp(row) >= now - hours * 60 * 60 * 1000);
+  const previous = trends.filter(row => {
+    const time = trendTimestamp(row);
+    return time >= now - hours * 2 * 60 * 60 * 1000 && time < now - hours * 60 * 60 * 1000;
+  });
+
+  const currentStats = buildKeywordStats(current);
+  const previousStats = buildKeywordStats(previous);
+  const previousMap = new Map(previousStats.map(item => [item.keyword, item.newsCount]));
+
+  const items = currentStats
+    .map(item => {
+      const previousCount = previousMap.get(item.keyword) || 0;
+      const increaseCount = item.newsCount - previousCount;
+      const isNew = previousCount === 0;
+      const growthRate = isNew
+        ? 0
+        : ((item.newsCount - previousCount) / previousCount) * 100;
+      const score = increaseCount * Math.log(item.newsCount + 1) + (isNew ? 1 : 0);
+
+      return {
+        keyword: item.keyword,
+        category: item.category,
+        currentCount: item.newsCount,
+        previousCount,
+        increaseCount,
+        isNew,
+        growthRate: Math.round(growthRate),
+        score: Math.round(score * 10) / 10,
+        representativeTitle: item.representativeTitle,
+        representativeNewsId: item.news[0]?.id || null,
+      };
+    })
+    .filter(item =>
+      item.currentCount >= minCount &&
+      item.increaseCount >= 2 &&
+      (item.isNew || item.growthRate >= 50)
+    )
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  return jsonResponse({
+    success: true,
+    period,
+    category,
+    minCount,
+    items,
+  }, corsHeaders);
+}
+
+async function handleGetTrendSentiment(url, env, corsHeaders) {
+  const period = normalizePeriod(url.searchParams.get('period') || '24h');
+  const category = url.searchParams.get('category') || '';
+  const keyword = normalizeKeyword(url.searchParams.get('keyword') || '');
+  const trends = await getRecentTrends(env, periodToHours(period), category, 500);
+  const filtered = keyword
+    ? trends.filter(row => extractKeywordsFromTrend(row).includes(keyword))
+    : trends;
+  const sentiment = summarizeSentiment(filtered);
+
+  return jsonResponse({
+    success: true,
+    period,
+    category,
+    keyword,
+    ...sentiment,
+  }, corsHeaders);
+}
+
+async function handleSearchNews(url, env, corsHeaders) {
+  const query = normalizeSearchText(url.searchParams.get('q') || '');
+  const category = url.searchParams.get('category') || '';
+  const period = normalizePeriod(url.searchParams.get('period') || '24h');
+  const sort = url.searchParams.get('sort') || 'latest';
+  const limit = clampNumber(parseInt(url.searchParams.get('limit') || '20', 10), 1, 50);
+  const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1);
+  const trends = await getRecentTrends(env, periodToHours(period), category, 800);
+
+  let results = query
+    ? trends.filter(row => trendSearchText(row).includes(query))
+    : trends;
+
+  results = sortNewsResults(results, sort, query);
+  const total = results.length;
+  const items = results.slice((page - 1) * limit, page * limit).map(formatNewsItem);
+  const suggestions = buildKeywordStats(results).slice(0, 8).map(item => item.keyword);
+
+  return jsonResponse({
+    success: true,
+    query,
+    category,
+    period,
+    sort,
+    page,
+    total,
+    hasMore: page * limit < total,
+    suggestions,
+    items,
+  }, corsHeaders);
+}
+
+async function handleGetNewsByKeyword(url, env, corsHeaders) {
+  const keyword = normalizeKeyword(url.searchParams.get('keyword') || '');
+  if (!keyword) {
+    return jsonResponse({ success: false, error: 'Missing keyword' }, corsHeaders, 400);
+  }
+
+  const category = url.searchParams.get('category') || '';
+  const period = normalizePeriod(url.searchParams.get('period') || '24h');
+  const sort = url.searchParams.get('sort') || 'latest';
+  const limit = clampNumber(parseInt(url.searchParams.get('limit') || '20', 10), 1, 50);
+  const trends = await getRecentTrends(env, periodToHours(period), category, 800);
+  const normalizedKeyword = normalizeSearchText(keyword);
+  const matches = trends.filter(row =>
+    extractKeywordsFromTrend(row).includes(keyword) ||
+    trendSearchText(row).includes(normalizedKeyword)
+  );
+  const items = sortNewsResults(matches, sort, keyword).slice(0, limit).map(formatNewsItem);
+
+  return jsonResponse({
+    success: true,
+    keyword,
+    category,
+    period,
+    total: matches.length,
+    items,
+  }, corsHeaders);
 }
 
 async function handleTriggerCollection(url, env, corsHeaders) {
@@ -654,6 +850,10 @@ async function getRecentTrendLinks(env, hours = 24) {
 // ─────────────────────────────────────────────────
 
 async function handleGetFearAndGreed(corsHeaders) {
+  return await handleGetStockFearGreed(corsHeaders);
+}
+
+async function handleGetStockFearGreed(corsHeaders) {
   try {
     const response = await fetch('https://production.dataviz.cnn.io/index/fearandgreed/graphdata', {
       headers: {
@@ -676,6 +876,8 @@ async function handleGetFearAndGreed(corsHeaders) {
 
     return jsonResponse({
       success: true,
+      market: 'stock',
+      source: 'CNN Fear & Greed Index',
       score: Math.round(current.score),
       rating: current.rating,
       previous_close: current.previous_close,
@@ -687,6 +889,83 @@ async function handleGetFearAndGreed(corsHeaders) {
     return jsonResponse({
       success: false,
       error: 'Cannot fetch Fear & Greed Index',
+    }, corsHeaders, 500);
+  }
+}
+
+async function handleGetCryptoFearGreed(corsHeaders) {
+  try {
+    const response = await fetch('https://api.alternative.me/fng/?limit=1&format=json', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch Crypto Fear & Greed data');
+    }
+
+    const data = await response.json();
+    const current = Array.isArray(data.data) ? data.data[0] : null;
+
+    if (!current) {
+      throw new Error('Invalid Crypto Fear & Greed response');
+    }
+
+    return jsonResponse({
+      success: true,
+      market: 'crypto',
+      source: 'Alternative.me Crypto Fear & Greed Index',
+      score: clampNumber(parseInt(current.value, 10), 0, 100),
+      rating: current.value_classification || 'Neutral',
+      timestamp: current.timestamp ? parseInt(current.timestamp, 10) * 1000 : Date.now(),
+      time_until_update: current.time_until_update || null,
+    }, corsHeaders);
+  } catch (error) {
+    console.error('Crypto Fear & Greed API Error:', error.message);
+
+    return jsonResponse({
+      success: false,
+      error: 'Cannot fetch Crypto Fear & Greed Index',
+    }, corsHeaders, 500);
+  }
+}
+
+async function handleGetAiStockSentiment(url, env, corsHeaders) {
+  try {
+    const period = normalizePeriod(url.searchParams.get('period') || '24h');
+    const trends = await getRecentTrends(env, periodToHours(period), '', 800);
+    const stockTrends = filterStockMarketTrends(trends);
+    const source = stockTrends.length >= 5 ? stockTrends : trends.slice(0, 200);
+    const sentiment = summarizeSentiment(source);
+    const aiScore = calculateAiStockScore(source, sentiment);
+    const keywords = buildKeywordStats(source).slice(0, 6).map(item => ({
+      keyword: item.keyword,
+      newsCount: item.newsCount,
+    }));
+
+    return jsonResponse({
+      success: true,
+      market: 'stock',
+      source: 'Pulse AI Stock Sentiment',
+      period,
+      score: aiScore.score,
+      rating: aiScore.rating,
+      summary: aiScore.summary,
+      components: aiScore.components,
+      newsCount: source.length,
+      keywords,
+      sentiment,
+      timestamp: Date.now(),
+    }, corsHeaders);
+  } catch (error) {
+    console.error('AI Stock Sentiment Error:', error.message);
+
+    return jsonResponse({
+      success: false,
+      error: 'Cannot calculate AI Stock Sentiment',
     }, corsHeaders, 500);
   }
 }
@@ -1064,4 +1343,364 @@ function pickSearchTermsForThisRun(terms, now, count) {
   }
 
   return result;
+}
+
+const KEYWORD_STOPWORDS = new Set([
+  '기자', '단독', '속보', '오늘', '이번', '관련', '발표', '공식', '논란', '확인',
+  '뉴스', '보도', '사진', '영상', '오전', '오후', '종합', '위원회', '대통령실',
+  '대한', '위해', '지난', '오는', '올해', '내년', '최근', '현재', '사실', '입장',
+  '정부', '시장', '전망', '가능성', '우리', '국내', '해외', '한국', '미국',
+  '위한', '통해', '따르면', '가운데', '이후', '앞두고', '대해', '대비', '대상',
+  '예정', '예정이다', '계획', '계획이다', '방침', '방침이다', '것으로', '것이다',
+  '문제', '시대', '상황', '경우', '부분', '내용', '결과', '과정', '수준', '기준',
+  '있다', '있는', '없다', '한다', '했다', '된다', '됐다', '나선다', '이어진다',
+  '밝혔다', '전했다', '말했다', '설명했다', '강조했다', '알려졌다', '보인다',
+  '그리고', '하지만', '또한', '관련해', '관해서', '때문에', '위해서', '하면서',
+  'the', 'and', 'for', 'with', 'from', 'this', 'that', 'news', 'today',
+]);
+
+const POSITIVE_WORDS = [
+  '상승', '급등', '호조', '개선', '성장', '확대', '기대', '강세', '최고', '돌파',
+  '회복', '성과', '흑자', '수혜', 'positive', 'growth', 'surge', 'record',
+];
+
+const NEGATIVE_WORDS = [
+  '하락', '급락', '부진', '위기', '우려', '불안', '충격', '논란', '적자', '침체',
+  '피해', '사고', '사망', '갈등', '전쟁', '폭락', 'negative', 'crisis', 'risk',
+];
+
+async function getRecentTrends(env, hours, category = '', limit = 500) {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const filters = [
+    `created_at=gte.${since}`,
+    category ? `category=eq.${encodeURIComponent(category)}` : '',
+  ].filter(Boolean).join('&');
+  const endpoint = `trends?select=id,korean_title,original_title,summary_kr,importance,tickers,category,link,source,published,created_at,view_count&${filters}&order=published.desc,created_at.desc&limit=${limit}`;
+  const { data, error } = await querySupabase(env, endpoint);
+
+  if (error) {
+    throw new Error(error.message || 'Failed to fetch recent trends');
+  }
+
+  return data || [];
+}
+
+function buildKeywordStats(trends) {
+  const bucket = new Map();
+
+  for (const trend of trends) {
+    const keywords = new Set(extractKeywordsFromTrend(trend));
+
+    for (const keyword of keywords) {
+      if (!bucket.has(keyword)) {
+        bucket.set(keyword, {
+          keyword,
+          categoryCounts: new Map(),
+          news: [],
+          score: 0,
+        });
+      }
+
+      const item = bucket.get(keyword);
+      item.news.push(trend);
+      item.score += (trend.importance || 3) + Math.log((trend.view_count || 0) + 1);
+      const category = trend.category || '기타';
+      item.categoryCounts.set(category, (item.categoryCounts.get(category) || 0) + 1);
+    }
+  }
+
+  return Array.from(bucket.values())
+    .map(item => {
+      const topCategory = Array.from(item.categoryCounts.entries())
+        .sort((a, b) => b[1] - a[1])[0]?.[0] || '기타';
+      const representative = item.news
+        .slice()
+        .sort((a, b) => (b.importance || 0) - (a.importance || 0) || trendTimestamp(b) - trendTimestamp(a))[0];
+
+      return {
+        keyword: item.keyword,
+        category: topCategory,
+        newsCount: item.news.length,
+        news: item.news,
+        score: Math.round(item.score * 10) / 10,
+        representativeTitle: representative?.korean_title || representative?.original_title || '',
+      };
+    })
+    .filter(item => item.newsCount >= 1)
+    .sort((a, b) => b.newsCount - a.newsCount || b.score - a.score || a.keyword.localeCompare(b.keyword, 'ko'));
+}
+
+function extractKeywordsFromTrend(trend) {
+  const text = [
+    trend.korean_title,
+    trend.original_title,
+    trend.summary_kr,
+  ].filter(Boolean).join(' ');
+  const normalizedText = decodeHTMLEntities(stripHTML(text))
+    .replace(/[()[\]{}"'“”‘’.,!?;:<>|/\\+=*&^%$#@~`·…]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const matches = normalizedText.match(/[가-힣A-Za-z0-9][가-힣A-Za-z0-9+.-]{1,}/g) || [];
+
+  return matches
+    .map(normalizeKeyword)
+    .filter(isUsefulKeyword);
+}
+
+function normalizeKeyword(keyword) {
+  let value = String(keyword || '')
+    .trim()
+    .replace(/^[0-9]+$/, '')
+    .replace(/(은|는|이|가|을|를|의|에|에서|으로|로|와|과|도|만|부터|까지)$/u, '');
+
+  if (/^[A-Za-z0-9+.-]+$/.test(value)) {
+    value = value.toUpperCase();
+  }
+
+  return value;
+}
+
+function isUsefulKeyword(keyword) {
+  if (!keyword || keyword.length < 2 || keyword.length > 20) return false;
+  if (KEYWORD_STOPWORDS.has(keyword.toLowerCase()) || KEYWORD_STOPWORDS.has(keyword)) return false;
+  if (/^\d+$/.test(keyword)) return false;
+  if (/^[가-힣]$/.test(keyword)) return false;
+  if (/^[가-힣]+(?:이다|입니다|했다|한다|된다|됐다|있다|없다|왔다|간다|나선다|밝혔다|전했다|말했다)$/u.test(keyword)) return false;
+  if (/^[가-힣]+(?:위한|위해|통해|따르면|하면서|이라며|이며|으로서|에게는)$/u.test(keyword)) return false;
+
+  return true;
+}
+
+function summarizeSentiment(trends) {
+  if (!trends || trends.length === 0) {
+    return {
+      temperature: 50,
+      label: 'neutral',
+      positiveRatio: 0,
+      neutralRatio: 100,
+      negativeRatio: 0,
+      count: 0,
+      summary: '분석할 뉴스가 아직 충분하지 않습니다.',
+    };
+  }
+
+  const counts = { positive: 0, neutral: 0, negative: 0 };
+  let totalScore = 0;
+
+  for (const trend of trends) {
+    const score = calculateSentimentTemperature([trend]);
+    totalScore += score;
+
+    if (score >= 71) counts.positive++;
+    else if (score <= 30) counts.negative++;
+    else counts.neutral++;
+  }
+
+  const count = trends.length;
+  const temperature = Math.round(totalScore / count);
+  const positiveRatio = Math.round((counts.positive / count) * 100);
+  const negativeRatio = Math.round((counts.negative / count) * 100);
+  const neutralRatio = Math.max(0, 100 - positiveRatio - negativeRatio);
+  const label = temperature >= 71 ? 'positive' : temperature <= 30 ? 'negative' : 'neutral';
+
+  return {
+    temperature,
+    label,
+    positiveRatio,
+    neutralRatio,
+    negativeRatio,
+    count,
+    summary: label === 'positive'
+      ? '오늘 뉴스 분위기는 기대감이 우세합니다.'
+      : label === 'negative'
+        ? '오늘 뉴스 분위기는 불안감이 큽니다.'
+        : '오늘 뉴스 분위기는 중립에 가깝습니다.',
+  };
+}
+
+function calculateSentimentTemperature(trends) {
+  if (!trends || trends.length === 0) return 50;
+
+  let total = 0;
+
+  for (const trend of trends) {
+    let score = 50;
+    const text = trendSearchText(trend);
+
+    for (const word of POSITIVE_WORDS) {
+      if (text.includes(word.toLowerCase())) score += 7;
+    }
+    for (const word of NEGATIVE_WORDS) {
+      if (text.includes(word.toLowerCase())) score -= 7;
+    }
+
+    total += clampNumber(score, 0, 100);
+  }
+
+  return clampNumber(Math.round(total / trends.length), 0, 100);
+}
+
+function filterStockMarketTrends(trends) {
+  const stockTerms = [
+    '증시', '주식', '코스피', '코스닥', '나스닥', '다우', 's&p', 'sp500', 's&p500',
+    '금리', '환율', '채권', '달러', '원화', '연준', 'fed', 'fomc', '실적', '반도체',
+    '엔비디아', '테슬라', '애플', '삼성전자', 'sk하이닉스', '시장', '투자',
+  ];
+
+  return (trends || []).filter(trend => {
+    if ((trend.category || '').includes('경제')) return true;
+    const text = trendSearchText(trend);
+    return stockTerms.some(term => text.includes(term.toLowerCase()));
+  });
+}
+
+function calculateAiStockScore(trends, sentiment) {
+  if (!trends || trends.length === 0) {
+    return {
+      score: 50,
+      rating: 'neutral',
+      summary: '증시 관련 뉴스가 아직 충분하지 않아 중립으로 표시합니다.',
+      components: {
+        newsSentiment: 50,
+        issueMomentum: 50,
+        riskBalance: 50,
+        importance: 50,
+      },
+    };
+  }
+
+  const count = trends.length;
+  const importanceAverage = trends.reduce((sum, item) => sum + (item.importance || 3), 0) / count;
+  const importanceScore = clampNumber(Math.round((importanceAverage / 5) * 100), 0, 100);
+  const issueMomentum = clampNumber(45 + Math.round(Math.log(count + 1) * 12), 0, 100);
+  const riskHits = trends.filter(trend => {
+    const text = trendSearchText(trend);
+    return NEGATIVE_WORDS.some(word => text.includes(String(word).toLowerCase()));
+  }).length;
+  const riskBalance = clampNumber(100 - Math.round((riskHits / count) * 100), 0, 100);
+  const score = clampNumber(Math.round(
+    sentiment.temperature * 0.46 +
+    issueMomentum * 0.22 +
+    riskBalance * 0.20 +
+    importanceScore * 0.12
+  ), 0, 100);
+  const rating = score >= 75
+    ? 'extreme greed'
+    : score >= 58
+      ? 'greed'
+      : score <= 25
+        ? 'extreme fear'
+        : score <= 42
+          ? 'fear'
+          : 'neutral';
+
+  return {
+    score,
+    rating,
+    summary: buildAiStockSummary(score, count, sentiment),
+    components: {
+      newsSentiment: sentiment.temperature,
+      issueMomentum,
+      riskBalance,
+      importance: importanceScore,
+    },
+  };
+}
+
+function buildAiStockSummary(score, count, sentiment) {
+  const mood = score >= 75
+    ? '강한 낙관'
+    : score >= 58
+      ? '낙관'
+      : score <= 25
+        ? '강한 불안'
+        : score <= 42
+          ? '불안'
+          : '중립';
+
+  return `최근 증시 관련 뉴스 ${count}건을 기준으로 ${mood} 흐름입니다. 뉴스 감정온도는 ${sentiment.temperature}점입니다.`;
+}
+
+function sortNewsResults(results, sort, query) {
+  const list = results.slice();
+
+  if (sort === 'popular') {
+    return list.sort((a, b) => (b.view_count || 0) - (a.view_count || 0) || (b.importance || 0) - (a.importance || 0));
+  }
+
+  if (sort === 'relevance' && query) {
+    return list.sort((a, b) => relevanceScore(b, query) - relevanceScore(a, query) || trendTimestamp(b) - trendTimestamp(a));
+  }
+
+  return list.sort((a, b) => trendTimestamp(b) - trendTimestamp(a));
+}
+
+function relevanceScore(trend, query) {
+  const title = normalizeSearchText(trend.korean_title || trend.original_title || '');
+  const summary = normalizeSearchText(trend.summary_kr || '');
+  let score = 0;
+
+  if (title.includes(query)) score += 10;
+  if (summary.includes(query)) score += 4;
+  score += trend.importance || 0;
+
+  return score;
+}
+
+function formatNewsItem(row) {
+  const temperature = calculateSentimentTemperature([row]);
+
+  return {
+    id: row.id,
+    title: row.korean_title || row.original_title || '',
+    summary: row.summary_kr || '',
+    source: row.source || 'Unknown',
+    category: row.category || '',
+    publishedAt: row.published || row.created_at || '',
+    importance: row.importance || 3,
+    link: row.link || '',
+    sentiment: temperature >= 71 ? 'positive' : temperature <= 30 ? 'negative' : 'neutral',
+    sentimentScore: temperature,
+  };
+}
+
+function trendTimestamp(row) {
+  const time = Date.parse(row.published || row.created_at || '');
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function trendSearchText(row) {
+  return normalizeSearchText([
+    row.korean_title,
+    row.original_title,
+    row.summary_kr,
+    row.category,
+    row.source,
+  ].filter(Boolean).join(' '));
+}
+
+function normalizeSearchText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizePeriod(period) {
+  const value = String(period || '').toLowerCase();
+  return ['1h', '6h', '24h', '7d'].includes(value) ? value : '24h';
+}
+
+function periodToHours(period) {
+  switch (period) {
+    case '1h':
+      return 1;
+    case '6h':
+      return 6;
+    case '7d':
+      return 24 * 7;
+    case '24h':
+    default:
+      return 24;
+  }
 }

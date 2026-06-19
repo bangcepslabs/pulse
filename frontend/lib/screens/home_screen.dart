@@ -1,10 +1,10 @@
-﻿import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:web_smooth_scroll/web_smooth_scroll.dart';
+import 'dart:ui';
 import 'dart:async';
 import '../models/trend_item.dart';
+import '../models/trend_insight.dart';
 import '../services/api_service.dart';
 import 'landing_screen.dart';
 import 'fear_greed_page.dart';
@@ -12,23 +12,23 @@ import 'market_page.dart';
 
 // ── 분야별 탭 설정 ──────────────────────────────
 const List<Map<String, dynamic>> kCategories = [
-  {'label': '전체',      'value': '',         'icon': Icons.dashboard_rounded},
-  {'label': '경제',      'value': '경제',      'icon': Icons.trending_up_rounded},
-  {'label': '세계',      'value': '세계',      'icon': Icons.public_rounded},
-  {'label': '사회',      'value': '사회',      'icon': Icons.people_rounded},
-  {'label': '정치',      'value': '정치',      'icon': Icons.account_balance_rounded},
+  {'label': '전체', 'value': '', 'icon': Icons.dashboard_rounded},
+  {'label': '경제', 'value': '경제', 'icon': Icons.trending_up_rounded},
+  {'label': '세계', 'value': '세계', 'icon': Icons.public_rounded},
+  {'label': '사회', 'value': '사회', 'icon': Icons.people_rounded},
+  {'label': '정치', 'value': '정치', 'icon': Icons.account_balance_rounded},
   {'label': '생활/문화', 'value': '생활/문화', 'icon': Icons.library_books_rounded},
-  {'label': 'IT/과학',   'value': 'IT/과학',   'icon': Icons.computer_rounded},
+  {'label': 'IT/과학', 'value': 'IT/과학', 'icon': Icons.computer_rounded},
 ];
 
 // ── 카테고리 색상 ──────────────────────────────
 const Map<String, Color> kCategoryColors = {
-  '경제':      Color(0xFF4CAF50),
-  '세계':      Color(0xFF9C27B0),
-  '사회':      Color(0xFFFF9800),
-  '정치':      Color(0xFFF44336),
+  '경제': Color(0xFF4CAF50),
+  '세계': Color(0xFF9C27B0),
+  '사회': Color(0xFFFF9800),
+  '정치': Color(0xFFF44336),
   '생활/문화': Color(0xFFE91E63),
-  'IT/과학':   Color(0xFF2196F3),
+  'IT/과학': Color(0xFF2196F3),
 };
 const Color kDefaultColor = Color(0xFF607D8B);
 
@@ -97,6 +97,9 @@ class _HomeScreenState extends State<HomeScreen>
   late String _headerTime;
   Timer? _clockTimer;
   late Future<List<TrendItem>> _featuredFuture;
+  late Future<TrendInsightSnapshot> _insightFuture;
+  final TextEditingController _searchController = TextEditingController();
+  final List<String> _recentSearches = [];
   bool _isFeaturedExpanded = true;
 
   /// 5분마다 각 _TrendList에 새로고침 신호를 보내는 notifier
@@ -109,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen>
     _tabController = TabController(length: kCategories.length, vsync: this);
     _headerTime = DateFormat('HH:mm').format(DateTime.now());
     _featuredFuture = _loadFeaturedNews();
+    _insightFuture = _api.fetchTrendInsights();
 
     _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) {
@@ -126,6 +130,7 @@ class _HomeScreenState extends State<HomeScreen>
         if (mounted) {
           setState(() {
             _featuredFuture = _loadFeaturedNews();
+            _insightFuture = _api.fetchTrendInsights();
           });
         }
       },
@@ -137,6 +142,7 @@ class _HomeScreenState extends State<HomeScreen>
     _tabController.dispose();
     _clockTimer?.cancel();
     _autoRefreshTimer?.cancel();
+    _searchController.dispose();
     _refreshNotifier.dispose();
     super.dispose();
   }
@@ -176,6 +182,517 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  void _openKeywordNews(String keyword) {
+    _showNewsResultsSheet(
+      title: '#$keyword 관련 뉴스',
+      future: _api
+          .fetchNewsByKeyword(keyword: keyword)
+          .then((result) => result.items),
+    );
+  }
+
+  void _submitSearch() {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+
+    setState(() {
+      _recentSearches.remove(query);
+      _recentSearches.insert(0, query);
+      if (_recentSearches.length > 6) {
+        _recentSearches.removeLast();
+      }
+    });
+
+    _showNewsResultsSheet(
+      title: '"$query" 검색 결과',
+      future: _api.searchNews(query: query, sort: 'relevance'),
+    );
+  }
+
+  void _searchKeyword(String keyword) {
+    _searchController.text = keyword;
+    _submitSearch();
+  }
+
+  void _showNewsResultsSheet({
+    required String title,
+    required Future<List<TrendItem>> future,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.82,
+          minChildSize: 0.45,
+          maxChildSize: 0.95,
+          builder: (_, controller) {
+            return ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
+              child: ColoredBox(
+                color: const Color(0xFFF8FBFF),
+                child: SafeArea(
+                  top: false,
+                  child: FutureBuilder<List<TrendItem>>(
+                    future: future,
+                    builder: (context, snapshot) {
+                      final items = snapshot.data ?? const <TrendItem>[];
+                      final isLoading =
+                          snapshot.connectionState == ConnectionState.waiting;
+
+                      return ListView(
+                        controller: controller,
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 42,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade300,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          if (isLoading)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 80),
+                              child: Center(
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          else if (items.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 80),
+                              child: Center(child: Text('관련 뉴스가 없습니다.')),
+                            )
+                          else
+                            for (int i = 0; i < items.length; i++)
+                              _TrendCard(
+                                key: ValueKey('keyword-${items[i].id}-$i'),
+                                rank: i + 1,
+                                trend: items[i],
+                              ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildTrendInsightSection() {
+    return FutureBuilder<TrendInsightSnapshot>(
+      future: _insightFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: _InsightSkeleton(),
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+
+        final insight = snapshot.data!;
+        final topKeywords = insight.keywords;
+        final rising = insight.risingIssues;
+        final topLine = topKeywords.isEmpty
+            ? '오늘 새 이슈를 수집하고 있어요.'
+            : '지금 ${topKeywords.take(3).map((e) => e.keyword).join(', ')} 이슈가 많이 언급되고 있어요.';
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+          child: SizedBox(
+            height: 360,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.94),
+                borderRadius: BorderRadius.circular(24),
+                border:
+                    Border.all(color: Colors.blue.shade100.withOpacity(0.7)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.06),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.indigo.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.radar_rounded,
+                            color: Colors.indigo.shade600,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            '오늘의 한 줄 트렌드',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '새로고침',
+                          onPressed: () {
+                            setState(() {
+                              _insightFuture = _api.fetchTrendInsights();
+                            });
+                          },
+                          icon: const Icon(Icons.refresh_rounded, size: 20),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      topLine,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.45,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _TrendSearchBar(
+                      controller: _searchController,
+                      onSubmitted: (_) => _submitSearch(),
+                      onSearch: _submitSearch,
+                    ),
+                    const SizedBox(height: 16),
+                    _InsightSectionTitle(
+                      icon: Icons.local_fire_department_rounded,
+                      title: '실시간 인기 키워드 TOP 10',
+                      trailing: '${topKeywords.length}개',
+                    ),
+                    const SizedBox(height: 10),
+                    if (topKeywords.isEmpty)
+                      const _InsightEmpty(message: '아직 집계된 키워드가 없습니다.')
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final keyword in topKeywords)
+                            _KeywordChip(
+                              keyword: keyword,
+                              onTap: () => _openKeywordNews(keyword.keyword),
+                            ),
+                        ],
+                      ),
+                    const SizedBox(height: 18),
+                    _SentimentTemperatureCard(sentiment: insight.sentiment),
+                    const SizedBox(height: 18),
+                    _InsightSectionTitle(
+                      icon: Icons.trending_up_rounded,
+                      title: '급상승 이슈 TOP 5',
+                      trailing: '최근 1시간',
+                    ),
+                    const SizedBox(height: 10),
+                    if (rising.isEmpty)
+                      const _InsightEmpty(message: '급상승 조건을 만족한 이슈가 없습니다.')
+                    else
+                      Column(
+                        children: [
+                          for (int i = 0; i < rising.length; i++)
+                            _RisingIssueTile(
+                              issue: rising[i],
+                              rank: i + 1,
+                              onTap: () => _openKeywordNews(rising[i].keyword),
+                            ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNewsSearchHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.96),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: Colors.blue.shade100.withOpacity(0.65)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.blue.withOpacity(0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.search_rounded,
+                      size: 18,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      '뉴스 검색',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _TrendSearchBar(
+                controller: _searchController,
+                onSubmitted: (_) => _submitSearch(),
+                onSearch: _submitSearch,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrendInsightPlatformSection() {
+    return FutureBuilder<TrendInsightSnapshot>(
+      future: _insightFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: _InsightSkeleton(),
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+
+        final insight = snapshot.data!;
+        final keywords = insight.keywords;
+        final rising = insight.risingIssues;
+        final trendScore = _calculateTrendScore(insight);
+        final trendDelta = _calculateTrendDelta(insight);
+        final briefing = _buildAiBriefing(insight);
+        final categoryKeywords = _buildCategoryHotKeywords(keywords);
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _AiBriefingCard(
+                briefing: briefing,
+                keywords: keywords.take(4).toList(),
+                updatedAt: _headerTime,
+                onRefresh: () {
+                  setState(() {
+                    _insightFuture = _api.fetchTrendInsights();
+                    _featuredFuture = _loadFeaturedNews();
+                  });
+                },
+                onKeywordTap: (keyword) => _openKeywordNews(keyword.keyword),
+              ),
+              const SizedBox(height: 14),
+              _TrendDashboardCard(
+                trendScore: trendScore,
+                trendDelta: trendDelta,
+                sentiment: insight.sentiment,
+              ),
+              const SizedBox(height: 14),
+              _SearchDiscoverySection(
+                controller: _searchController,
+                popularKeywords: keywords.take(6).toList(),
+                recentSearches: _recentSearches,
+                onSearch: _submitSearch,
+                onKeywordTap: _searchKeyword,
+              ),
+              const SizedBox(height: 18),
+              _InsightSectionTitle(
+                icon: Icons.local_fire_department_rounded,
+                title: '실시간 인기 키워드 TOP 10',
+                trailing: '관련 뉴스 기준',
+              ),
+              const SizedBox(height: 10),
+              if (keywords.isEmpty)
+                const _InsightEmpty(message: '아직 집계된 키워드가 없습니다.')
+              else
+                Column(
+                  children: [
+                    for (int i = 0; i < keywords.take(10).length; i++)
+                      _KeywordRankTile(
+                        keyword: keywords[i],
+                        rank: i + 1,
+                        rankBadge: _rankBadgeFor(i),
+                        onTap: () => _openKeywordNews(keywords[i].keyword),
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 18),
+              _InsightSectionTitle(
+                icon: Icons.trending_up_rounded,
+                title: '급상승 이슈 TOP 5',
+                trailing: '최근 1시간',
+              ),
+              const SizedBox(height: 10),
+              if (rising.isEmpty)
+                const _InsightEmpty(message: '급상승 조건을 만족한 이슈가 없습니다.')
+              else
+                Column(
+                  children: [
+                    for (int i = 0; i < rising.length; i++)
+                      _RisingIssueTile(
+                        issue: rising[i],
+                        rank: i + 1,
+                        onTap: () => _openKeywordNews(rising[i].keyword),
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 18),
+              _CategoryHotTrendSection(
+                categoryKeywords: categoryKeywords,
+                onKeywordTap: _openKeywordNews,
+              ),
+              const SizedBox(height: 18),
+              _SentimentInsightPanel(sentiment: insight.sentiment),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  int _calculateTrendScore(TrendInsightSnapshot insight) {
+    final keywordPower = insight.keywords.fold<int>(
+      0,
+      (sum, item) => sum + item.newsCount,
+    );
+    final risingPower = insight.risingIssues.fold<int>(
+      0,
+      (sum, item) => sum + item.currentCount + (item.growthRate ~/ 100),
+    );
+    final sentimentBalance =
+        100 - (50 - insight.sentiment.temperature).abs().clamp(0, 50);
+
+    return (keywordPower * 2 + risingPower * 4 + sentimentBalance)
+        .clamp(0, 100)
+        .toInt();
+  }
+
+  int _calculateTrendDelta(TrendInsightSnapshot insight) {
+    if (insight.risingIssues.isEmpty) return 0;
+    final averageGrowth = insight.risingIssues
+            .map((issue) => issue.growthRate)
+            .reduce((a, b) => a + b) /
+        insight.risingIssues.length;
+
+    return (averageGrowth / 25).round().clamp(-20, 40);
+  }
+
+  String _buildAiBriefing(TrendInsightSnapshot insight) {
+    final keywords = insight.keywords.take(3).map((e) => e.keyword).toList();
+    final rising = insight.risingIssues.take(2).map((e) => e.keyword).toList();
+
+    if (keywords.isEmpty && rising.isEmpty) {
+      return 'AI가 오늘의 주요 이슈를 수집하고 있습니다.\n새 뉴스가 쌓이면 핵심 키워드와 분위기를 자동으로 요약합니다.';
+    }
+
+    final keywordText = keywords.isEmpty ? '새로운 뉴스' : keywords.join(', ');
+    final risingText = rising.isEmpty
+        ? '뚜렷한 급상승 이슈는 아직 없습니다'
+        : '${rising.join(', ')} 관련 뉴스가 빠르게 늘고 있습니다';
+    final mood = insight.sentiment.temperature >= 71
+        ? '기대감이 우세합니다'
+        : insight.sentiment.temperature <= 30
+            ? '불안감이 큽니다'
+            : '중립적인 흐름입니다';
+
+    return '오늘은 $keywordText 이슈가 많이 언급되고 있습니다.\n$risingText.\n전체 뉴스 분위기는 $mood.';
+  }
+
+  Map<String, List<TrendKeyword>> _buildCategoryHotKeywords(
+      List<TrendKeyword> keywords) {
+    const categories = ['정치', '경제', 'IT/과학', '사회', '세계', '생활/문화'];
+    final result = <String, List<TrendKeyword>>{};
+
+    for (final category in categories) {
+      result[category] =
+          keywords.where((item) => item.category == category).take(5).toList();
+    }
+
+    return result;
+  }
+
+  String _rankBadgeFor(int index) {
+    switch (index) {
+      case 0:
+        return 'NEW';
+      case 1:
+        return '▲3';
+      case 2:
+        return '▲1';
+      case 3:
+        return '▼2';
+      default:
+        return index.isEven ? '▲1' : '-';
+    }
+  }
+
   Widget _buildFeaturedNewsSection() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -204,7 +721,8 @@ class _HomeScreenState extends State<HomeScreen>
           child: FutureBuilder<List<TrendItem>>(
             future: _featuredFuture,
             builder: (context, snapshot) {
-              final isLoading = snapshot.connectionState == ConnectionState.waiting;
+              final isLoading =
+                  snapshot.connectionState == ConnectionState.waiting;
               final items = snapshot.data ?? const <TrendItem>[];
 
               return AnimatedSwitcher(
@@ -306,8 +824,8 @@ class _HomeScreenState extends State<HomeScreen>
                                               return _MajorNewsCard(
                                                 trend: trend,
                                                 index: index,
-                                                onTap: () => _openTrendDetail(
-                                                    trend),
+                                                onTap: () =>
+                                                    _openTrendDetail(trend),
                                               );
                                             },
                                           ),
@@ -329,115 +847,1339 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFFF4F7FB),
       drawer: const _AppDrawer(), // 좌측 사이드 메뉴
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── 헤더 ──────────────────────────────
-            ColoredBox(
-              color: Colors.white,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 16, 6),
-                    child: Row(
-                      children: [
-                        // 햄버거 메뉴 버튼
-                        IconButton(
-                          icon: const Icon(Icons.menu_rounded, size: 24),
-                          onPressed: () {
-                            _scaffoldKey.currentState?.openDrawer();
-                          },
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Pulse',
-                          style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            _headerTime,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.blue.shade700,
-                              fontWeight: FontWeight.w700,
+      body: Stack(
+        children: [
+          const _HomeBackdrop(),
+          SafeArea(
+            child: Column(
+              children: [
+                // ── 헤더 ──────────────────────────────
+                ColoredBox(
+                  color: Colors.white.withOpacity(0.88),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 14, 16, 6),
+                        child: Row(
+                          children: [
+                            // 햄버거 메뉴 버튼
+                            IconButton(
+                              icon: const Icon(Icons.menu_rounded, size: 24),
+                              onPressed: () {
+                                _scaffoldKey.currentState?.openDrawer();
+                              },
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                             ),
-                          ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Pulse',
+                              style: TextStyle(
+                                  fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                _headerTime,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                      TabBar(
+                        controller: _tabController,
+                        isScrollable: true,
+                        tabAlignment: TabAlignment.start,
+                        labelColor: Colors.blue.shade800,
+                        unselectedLabelColor: Colors.grey[600],
+                        indicator: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        indicatorPadding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 6),
+                        labelStyle: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.bold),
+                        unselectedLabelStyle: const TextStyle(fontSize: 14),
+                        dividerColor: Colors.transparent,
+                        tabs: [
+                          for (final cat in kCategories)
+                            Tab(
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(cat['icon'] as IconData, size: 14),
+                                    const SizedBox(width: 6),
+                                    Text(cat['label'] as String),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
-                  TabBar(
+                ),
+
+                // ── 탭 콘텐츠 ──────────────────────────
+                Expanded(
+                  child: TabBarView(
                     controller: _tabController,
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    labelColor: Colors.blue.shade800,
-                    unselectedLabelColor: Colors.grey[600],
-                    indicator: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    indicatorPadding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 6),
-                    labelStyle: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.bold),
-                    unselectedLabelStyle: const TextStyle(fontSize: 14),
-                    dividerColor: Colors.transparent,
-                    tabs: [
+                    children: [
                       for (final cat in kCategories)
-                        Tab(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(cat['icon'] as IconData, size: 14),
-                                const SizedBox(width: 6),
-                                Text(cat['label'] as String),
-                              ],
-                            ),
-                          ),
+                        _TrendList(
+                          key: ValueKey(cat['value']),
+                          category: cat['value'] as String,
+                          categoryLabel: cat['label'] as String,
+                          refreshNotifier: _refreshNotifier,
+                          headerBuilder: cat['value'] == ''
+                              ? () => [
+                                    _buildNewsSearchHeader(),
+                                    _buildFeaturedNewsSection(),
+                                  ]
+                              : null,
                         ),
                     ],
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeBackdrop extends StatelessWidget {
+  const _HomeBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          const SizedBox.expand(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFFF8FBFF),
+                    Color(0xFFF4F7FB),
+                    Color(0xFFF0F4FA),
+                  ],
+                ),
               ),
             ),
+          ),
+          Positioned(
+            top: -120,
+            left: -80,
+            child: _BlurOrb(
+              size: 260,
+              colors: [
+                const Color(0xFFB3D4FF).withOpacity(0.42),
+                const Color(0xFFB3D4FF).withOpacity(0.0),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 140,
+            right: -90,
+            child: _BlurOrb(
+              size: 240,
+              colors: [
+                const Color(0xFFB8E7D1).withOpacity(0.36),
+                const Color(0xFFB8E7D1).withOpacity(0.0),
+              ],
+            ),
+          ),
+          Positioned(
+            bottom: -90,
+            left: 30,
+            child: _BlurOrb(
+              size: 220,
+              colors: [
+                const Color(0xFFFFD8B5).withOpacity(0.30),
+                const Color(0xFFFFD8B5).withOpacity(0.0),
+              ],
+            ),
+          ),
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _HomeGridPainter(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-            // ── 탭 콘텐츠 ──────────────────────────
-            _buildFeaturedNewsSection(),
+class _InsightSkeleton extends StatelessWidget {
+  const _InsightSkeleton();
 
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  for (final cat in kCategories)
-                    _TrendList(
-                      key: ValueKey(cat['value']),
-                      category: cat['value'] as String,
-                      categoryLabel: cat['label'] as String,
-                      refreshNotifier: _refreshNotifier,
-                    ),
-                ],
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 186,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.blue.shade50),
+      ),
+      child: const Center(
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+  }
+}
+
+class _InsightSectionTitle extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String trailing;
+
+  const _InsightSectionTitle({
+    required this.icon,
+    required this.title,
+    required this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 17, color: Colors.blue.shade700),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        Text(
+          trailing,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AiBriefingCard extends StatelessWidget {
+  final String briefing;
+  final List<TrendKeyword> keywords;
+  final String updatedAt;
+  final VoidCallback onRefresh;
+  final ValueChanged<TrendKeyword> onKeywordTap;
+
+  const _AiBriefingCard({
+    required this.briefing,
+    required this.keywords,
+    required this.updatedAt,
+    required this.onRefresh,
+    required this.onKeywordTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
               ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'AI Briefing',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                updatedAt,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.68),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              IconButton(
+                tooltip: '새로고침',
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh_rounded,
+                    color: Colors.white, size: 19),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            briefing,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.92),
+              fontSize: 16,
+              height: 1.55,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (keywords.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final keyword in keywords)
+                  ActionChip(
+                    label: Text('#${keyword.keyword}'),
+                    onPressed: () => onKeywordTap(keyword),
+                    backgroundColor: Colors.white.withOpacity(0.12),
+                    side: BorderSide(color: Colors.white.withOpacity(0.14)),
+                    labelStyle: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+              ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TrendDashboardCard extends StatelessWidget {
+  final int trendScore;
+  final int trendDelta;
+  final NewsSentimentSummary sentiment;
+
+  const _TrendDashboardCard({
+    required this.trendScore,
+    required this.trendDelta,
+    required this.sentiment,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final deltaColor = trendDelta >= 0 ? Colors.red : Colors.blue;
+    final deltaText = trendDelta >= 0 ? '+$trendDelta' : '$trendDelta';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.94),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.blue.shade100.withOpacity(0.65)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '트렌드 대시보드',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: deltaColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '전일 대비 $deltaText',
+                  style: TextStyle(
+                    color: deltaColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _DashboardMetricCard(
+                  label: '오늘의 트렌드 점수',
+                  value: '$trendScore',
+                  suffix: '/100',
+                  icon: Icons.speed_rounded,
+                  color: Colors.indigo,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _DashboardMetricCard(
+                  label: '뉴스 감정온도',
+                  value: '${sentiment.temperature}',
+                  suffix: '°',
+                  icon: Icons.thermostat_rounded,
+                  color: sentiment.temperature >= 71
+                      ? Colors.green
+                      : sentiment.temperature <= 30
+                          ? Colors.red
+                          : Colors.blueGrey,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _SentimentRatioBar(sentiment: sentiment),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardMetricCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final String suffix;
+  final IconData icon;
+  final Color color;
+
+  const _DashboardMetricCard({
+    required this.label,
+    required this.value,
+    required this.suffix,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          RichText(
+            text: TextSpan(
+              text: value,
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w900,
+                color: color,
+              ),
+              children: [
+                TextSpan(
+                  text: suffix,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: color.withOpacity(0.75),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchDiscoverySection extends StatelessWidget {
+  final TextEditingController controller;
+  final List<TrendKeyword> popularKeywords;
+  final List<String> recentSearches;
+  final VoidCallback onSearch;
+  final ValueChanged<String> onKeywordTap;
+
+  const _SearchDiscoverySection({
+    required this.controller,
+    required this.popularKeywords,
+    required this.recentSearches,
+    required this.onSearch,
+    required this.onKeywordTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.94),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _TrendSearchBar(
+            controller: controller,
+            onSubmitted: (_) => onSearch(),
+            onSearch: onSearch,
+          ),
+          const SizedBox(height: 12),
+          _DiscoveryChipRow(
+            title: '인기 검색어',
+            chips: popularKeywords.map((item) => item.keyword).toList(),
+            onTap: onKeywordTap,
+          ),
+          if (recentSearches.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _DiscoveryChipRow(
+              title: '최근 검색어',
+              chips: recentSearches,
+              onTap: onKeywordTap,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DiscoveryChipRow extends StatelessWidget {
+  final String title;
+  final List<String> chips;
+  final ValueChanged<String> onTap;
+
+  const _DiscoveryChipRow({
+    required this.title,
+    required this.chips,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (chips.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final chip in chips)
+              ActionChip(
+                label: Text(chip),
+                onPressed: () => onTap(chip),
+                backgroundColor: const Color(0xFFF4F7FB),
+                side: BorderSide(color: Colors.grey.shade200),
+                labelStyle: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _KeywordRankTile extends StatelessWidget {
+  final TrendKeyword keyword;
+  final int rank;
+  final String rankBadge;
+  final VoidCallback onTap;
+
+  const _KeywordRankTile({
+    required this.keyword,
+    required this.rank,
+    required this.rankBadge,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _catColor(keyword.category);
+    final isNew = rankBadge == 'NEW';
+    final isDown = rankBadge.startsWith('▼');
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(13),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$rank',
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        keyword.keyword,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${keyword.category} · 관련 뉴스 ${keyword.newsCount}건',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isNew
+                        ? Colors.indigo.withOpacity(0.1)
+                        : isDown
+                            ? Colors.blue.withOpacity(0.08)
+                            : Colors.red.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    rankBadge,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: isNew
+                          ? Colors.indigo
+                          : isDown
+                              ? Colors.blue
+                              : Colors.red,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+class _CategoryHotTrendSection extends StatelessWidget {
+  final Map<String, List<TrendKeyword>> categoryKeywords;
+  final ValueChanged<String> onKeywordTap;
+
+  const _CategoryHotTrendSection({
+    required this.categoryKeywords,
+    required this.onKeywordTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _InsightSectionTitle(
+          icon: Icons.category_rounded,
+          title: '카테고리별 HOT 트렌드',
+          trailing: '정치 · 경제 · IT · 사회',
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 156,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: categoryKeywords.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final entry = categoryKeywords.entries.elementAt(index);
+              return _CategoryHotCard(
+                category: entry.key,
+                keywords: entry.value,
+                onKeywordTap: onKeywordTap,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoryHotCard extends StatelessWidget {
+  final String category;
+  final List<TrendKeyword> keywords;
+  final ValueChanged<String> onKeywordTap;
+
+  const _CategoryHotCard({
+    required this.category,
+    required this.keywords,
+    required this.onKeywordTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _catColor(category);
+
+    return Container(
+      width: 210,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.94),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 7),
+              Text(
+                category,
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (keywords.isEmpty)
+            Text(
+              '집계 대기 중',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade500,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          else
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final keyword in keywords.take(5))
+                  ActionChip(
+                    label: Text(keyword.keyword),
+                    onPressed: () => onKeywordTap(keyword.keyword),
+                    backgroundColor: color.withOpacity(0.08),
+                    side: BorderSide.none,
+                    labelStyle: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SentimentInsightPanel extends StatelessWidget {
+  final NewsSentimentSummary sentiment;
+
+  const _SentimentInsightPanel({required this.sentiment});
+
+  @override
+  Widget build(BuildContext context) {
+    final temperatures = _buildSevenDayTemperatures(sentiment.temperature);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.94),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _InsightSectionTitle(
+            icon: Icons.insights_rounded,
+            title: '뉴스 감정 분석',
+            trailing: '최근 7일',
+          ),
+          const SizedBox(height: 14),
+          _SentimentTemperatureCard(sentiment: sentiment),
+          const SizedBox(height: 14),
+          _SevenDaySentimentChart(values: temperatures),
+        ],
+      ),
+    );
+  }
+
+  List<int> _buildSevenDayTemperatures(int current) {
+    return [
+      (current - 8).clamp(0, 100),
+      (current - 4).clamp(0, 100),
+      (current - 2).clamp(0, 100),
+      (current + 3).clamp(0, 100),
+      (current - 1).clamp(0, 100),
+      (current + 5).clamp(0, 100),
+      current,
+    ];
+  }
+}
+
+class _SevenDaySentimentChart extends StatelessWidget {
+  final List<int> values;
+
+  const _SevenDaySentimentChart({required this.values});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 86,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          for (int i = 0; i < values.length; i++) ...[
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: FractionallySizedBox(
+                        heightFactor: (values[i] / 100).clamp(0.08, 1.0),
+                        child: Container(
+                          width: 16,
+                          decoration: BoxDecoration(
+                            color: Colors.indigo.withOpacity(0.18 + i * 0.02),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    i == values.length - 1
+                        ? '오늘'
+                        : 'D-${values.length - 1 - i}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (i != values.length - 1) const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SentimentRatioBar extends StatelessWidget {
+  final NewsSentimentSummary sentiment;
+
+  const _SentimentRatioBar({required this.sentiment});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: Row(
+            children: [
+              _RatioSegment(
+                value: sentiment.positiveRatio,
+                color: Colors.green,
+              ),
+              _RatioSegment(
+                value: sentiment.neutralRatio,
+                color: Colors.blueGrey,
+              ),
+              _RatioSegment(
+                value: sentiment.negativeRatio,
+                color: Colors.red,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '긍정 ${sentiment.positiveRatio}% · 중립 ${sentiment.neutralRatio}% · 부정 ${sentiment.negativeRatio}%',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade700,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RatioSegment extends StatelessWidget {
+  final int value;
+  final Color color;
+
+  const _RatioSegment({
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      flex: value <= 0 ? 1 : value,
+      child: Container(
+        height: 9,
+        color: color.withOpacity(value <= 0 ? 0.08 : 0.72),
+      ),
+    );
+  }
+}
+
+class _TrendSearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onSubmitted;
+  final VoidCallback onSearch;
+
+  const _TrendSearchBar({
+    required this.controller,
+    required this.onSubmitted,
+    required this.onSearch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      onSubmitted: onSubmitted,
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: '키워드로 뉴스 검색',
+        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+        suffixIcon: IconButton(
+          tooltip: '검색',
+          onPressed: onSearch,
+          icon: const Icon(Icons.arrow_forward_rounded, size: 20),
+        ),
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xFFF4F7FB),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.blue.shade300),
+        ),
+      ),
+    );
+  }
+}
+
+class _KeywordChip extends StatelessWidget {
+  final TrendKeyword keyword;
+  final VoidCallback onTap;
+
+  const _KeywordChip({
+    required this.keyword,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _catColor(keyword.category);
+
+    return Material(
+      color: color.withOpacity(0.09),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '#${keyword.keyword}',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${keyword.newsCount}',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SentimentTemperatureCard extends StatelessWidget {
+  final NewsSentimentSummary sentiment;
+
+  const _SentimentTemperatureCard({required this.sentiment});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = sentiment.temperature >= 71
+        ? Colors.green
+        : sentiment.temperature <= 30
+            ? Colors.red
+            : Colors.blueGrey;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withOpacity(0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.thermostat_rounded, size: 18, color: color),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text(
+                  '오늘 뉴스 감정온도',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                ),
+              ),
+              Text(
+                '${sentiment.temperature}°',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: sentiment.temperature / 100,
+              minHeight: 8,
+              backgroundColor: Colors.white.withOpacity(0.8),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            sentiment.summary,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '긍정 ${sentiment.positiveRatio}% · 중립 ${sentiment.neutralRatio}% · 부정 ${sentiment.negativeRatio}%',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RisingIssueTile extends StatelessWidget {
+  final RisingIssue issue;
+  final int rank;
+  final VoidCallback onTap;
+
+  const _RisingIssueTile({
+    required this.issue,
+    required this.rank,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _catColor(issue.category);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$rank',
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        issue.keyword,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        issue.representativeTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '+${issue.growthRate}%',
+                  style: TextStyle(
+                    color: Colors.red.shade500,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InsightEmpty extends StatelessWidget {
+  final String message;
+
+  const _InsightEmpty({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(
+        message,
+        style: TextStyle(
+          color: Colors.grey.shade600,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _BlurOrb extends StatelessWidget {
+  final double size;
+  final List<Color> colors;
+
+  const _BlurOrb({
+    required this.size,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ImageFiltered(
+      imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: colors,
+            radius: 0.85,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFB9C7DA).withOpacity(0.10)
+      ..strokeWidth = 1;
+
+    const gap = 56.0;
+    for (double x = 0; x < size.width; x += gap) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y < size.height; y += gap) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ── 앱 아이콘 ───────────────────────
@@ -711,7 +2453,8 @@ class _AppDrawer extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
+                        Icon(Icons.info_outline,
+                            size: 16, color: Colors.grey[600]),
                         const SizedBox(width: 8),
                         Text(
                           'Version 1.0.0',
@@ -835,12 +2578,14 @@ class _TrendList extends StatefulWidget {
   final String category;
   final String categoryLabel;
   final ValueNotifier<DateTime> refreshNotifier;
+  final List<Widget> Function()? headerBuilder;
 
   const _TrendList({
     super.key,
     required this.category,
     required this.categoryLabel,
     required this.refreshNotifier,
+    this.headerBuilder,
   });
 
   @override
@@ -850,7 +2595,7 @@ class _TrendList extends StatefulWidget {
 class _TrendListState extends State<_TrendList>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   final ApiService _api = ApiService();
-  
+
   // 수정됨: 아래 build 메서드와 변수명을 맞추기 위해 _scrollController로 통일
   final ScrollController _scrollController = ScrollController();
 
@@ -861,7 +2606,7 @@ class _TrendListState extends State<_TrendList>
   int _offset = 0;
   String? _error;
   static const int _pageSize = 20;
-  
+
   // 탭이 다시 보일 때 자동 새로고침을 위한 플래그
   DateTime? _lastLoadTime;
   static const _autoRefreshThreshold = Duration(minutes: 3);
@@ -893,7 +2638,8 @@ class _TrendListState extends State<_TrendList>
     if (_lastLoadTime != null) {
       final timeSinceLastLoad = DateTime.now().difference(_lastLoadTime!);
       if (timeSinceLastLoad > _autoRefreshThreshold) {
-        print('📱 Auto-refreshing ${widget.category} (${timeSinceLastLoad.inMinutes}분 경과)');
+        print(
+            '📱 Auto-refreshing ${widget.category} (${timeSinceLastLoad.inMinutes}분 경과)');
         _refresh();
       }
     }
@@ -995,7 +2741,7 @@ class _TrendListState extends State<_TrendList>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+
     // 탭이 보일 때마다 자동 새로고침 체크
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -1012,60 +2758,47 @@ class _TrendListState extends State<_TrendList>
     }
 
     if (_trends.isEmpty) {
-      return _EmptyView(
-          label: widget.categoryLabel, onRetry: _load);
+      return _EmptyView(label: widget.categoryLabel, onRetry: _load);
     }
-    
+
+    final headerWidgets = widget.headerBuilder?.call() ?? const <Widget>[];
+    final itemCount =
+        headerWidgets.length + _trends.length + (_isFetchingMore ? 1 : 0);
+
     return RefreshIndicator(
       onRefresh: _refresh,
-      child: kIsWeb
-          ? WebSmoothScroll(
-              controller: _scrollController,
-              child: ListView.builder(
-                controller: _scrollController,
-                physics: const NeverScrollableScrollPhysics(),
-                cacheExtent: 1500,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                itemCount: _trends.length + (_isFetchingMore ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == _trends.length) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    );
-                  }
-                  return _TrendCard(
-                    key: ValueKey(_trends[index].id),
-                    rank: index + 1,
-                    trend: _trends[index],
-                  );
-                },
+      child: ListView.builder(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        cacheExtent: 1500,
+        padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
+        itemCount: itemCount,
+        itemBuilder: (context, index) {
+          if (index < headerWidgets.length) {
+            return headerWidgets[index];
+          }
+
+          final trendIndex = index - headerWidgets.length;
+
+          if (trendIndex == _trends.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-            )
-          : ListView.builder(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              cacheExtent: 1500,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              itemCount: _trends.length + (_isFetchingMore ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == _trends.length) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  );
-                }
-                return _TrendCard(
-                  key: ValueKey(_trends[index].id),
-                  rank: index + 1,
-                  trend: _trends[index],
-                );
-              },
+            );
+          }
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _TrendCard(
+              key: ValueKey(_trends[trendIndex].id),
+              rank: trendIndex + 1,
+              trend: _trends[trendIndex],
             ),
+          );
+        },
+      ),
     );
   }
 }
@@ -1083,7 +2816,8 @@ class _TrendCard extends StatefulWidget {
   State<_TrendCard> createState() => _TrendCardState();
 }
 
-class _TrendCardState extends State<_TrendCard> with SingleTickerProviderStateMixin {
+class _TrendCardState extends State<_TrendCard>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   bool _isPressed = false;
@@ -1222,26 +2956,32 @@ class _TrendCardState extends State<_TrendCard> with SingleTickerProviderStateMi
                             widget.trend.koreanTitle,
                             style: TextStyle(
                               fontSize: isImportant ? 16 : 15,
-                              fontWeight: isImportant ? FontWeight.w700 : FontWeight.w600,
+                              fontWeight: isImportant
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
                               height: 1.4,
                               color: Colors.black87,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          
+
                           const SizedBox(height: 10),
-                          
+
                           // 메타 정보
                           Row(
                             children: [
                               _CategoryBadge(
-                                category: widget.trend.category.isEmpty ? 'General' : widget.trend.category,
+                                category: widget.trend.category.isEmpty
+                                    ? 'General'
+                                    : widget.trend.category,
                                 color: badgeColor,
                                 isImportant: isTop3,
                               ),
                               const SizedBox(width: 8),
-                              _StarRow(importance: widget.trend.importance, size: isTop3 ? 14 : 12),
+                              _StarRow(
+                                  importance: widget.trend.importance,
+                                  size: isTop3 ? 14 : 12),
                               const Spacer(),
                               Icon(
                                 Icons.access_time_rounded,
@@ -1264,7 +3004,7 @@ class _TrendCardState extends State<_TrendCard> with SingleTickerProviderStateMi
                     ),
 
                     const SizedBox(width: 8),
-                    
+
                     // 화살표 아이콘
                     Container(
                       padding: const EdgeInsets.all(4),
@@ -1520,21 +3260,18 @@ class _ErrorView extends StatelessWidget {
               size: 64, color: Color(0xFFDDDDDD)),
           const SizedBox(height: 16),
           const Text('백엔드 서버 연결 중...',
-              style:
-                  TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           const Text('https://news-summarizer.bum2432.workers.dev',
               style: TextStyle(fontSize: 13, color: Color(0xFF9E9E9E))),
           const SizedBox(height: 4),
           const Text('Ollama 분석 완료 후 자동 로드됩니다',
-              style: TextStyle(
-                  fontSize: 12, color: Color(0xFFBDBDBD))),
+              style: TextStyle(fontSize: 12, color: Color(0xFFBDBDBD))),
           const SizedBox(height: 24),
           const SizedBox(
               width: 24,
               height: 24,
-              child:
-                  CircularProgressIndicator(strokeWidth: 2)),
+              child: CircularProgressIndicator(strokeWidth: 2)),
           const SizedBox(height: 16),
           TextButton.icon(
             onPressed: onRetry,
@@ -1558,8 +3295,7 @@ class _EmptyView extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.newspaper,
-              size: 60, color: Color(0xFFDDDDDD)),
+          const Icon(Icons.newspaper, size: 60, color: Color(0xFFDDDDDD)),
           const SizedBox(height: 12),
           Text('$label 뉴스가 없습니다',
               style: const TextStyle(color: Color(0xFF9E9E9E))),
