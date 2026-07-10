@@ -44,7 +44,7 @@ class MiniChartCard extends StatelessWidget {
         );
       },
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -63,11 +63,19 @@ class MiniChartCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
-                Text(symbol, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey[500])),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(symbol, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.grey[500])),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Expanded(
               child: IgnorePointer(
                 child: LineChart(
@@ -88,9 +96,9 @@ class MiniChartCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Text('$prefix${formatter.format(currentPrice)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black87)),
-            Text('${isUp ? '+' : ''}${percentChange.toStringAsFixed(2)}%', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: chartColor)),
+            const SizedBox(height: 10),
+            Text('$prefix${formatter.format(currentPrice)}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black87)),
+            Text('${isUp ? '+' : ''}${percentChange.toStringAsFixed(2)}%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: chartColor)),
           ],
         ),
       ),

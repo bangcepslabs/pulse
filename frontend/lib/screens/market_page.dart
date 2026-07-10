@@ -99,6 +99,7 @@ class _MarketPageState extends State<MarketPage> {
     var crossAxisCount = 4;
     if (screenWidth < 1100) crossAxisCount = 3;
     if (screenWidth < 800) crossAxisCount = 2;
+    final childAspectRatio = screenWidth < 800 ? 1.18 : (screenWidth < 1100 ? 1.28 : 1.42);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -147,7 +148,7 @@ class _MarketPageState extends State<MarketPage> {
                   ),
                 )
               : SingleChildScrollView(
-                  padding: const EdgeInsets.all(32),
+                  padding: const EdgeInsets.all(24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -159,14 +160,14 @@ class _MarketPageState extends State<MarketPage> {
                           color: Colors.grey,
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 18),
                       GridView.count(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         crossAxisCount: crossAxisCount,
-                        crossAxisSpacing: 24,
-                        mainAxisSpacing: 24,
-                        childAspectRatio: 1.0,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                        childAspectRatio: childAspectRatio,
                         children: _marketDataList.map((data) {
                           return MiniChartCard(
                             symbol: data['symbol'],

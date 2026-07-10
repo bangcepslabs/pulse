@@ -38,7 +38,7 @@ class _TradingViewChartState extends State<TradingViewChart> {
   }
 
   void _initController() {
-    final String htmlString = '''
+    final htmlString = '''
       <!DOCTYPE html>
       <html>
       <head>
@@ -46,53 +46,123 @@ class _TradingViewChartState extends State<TradingViewChart> {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
         <style>
+          :root {
+            color-scheme: light;
+          }
+
           body {
             margin: 0;
-            padding: 10px;
-            background: white;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: 12px;
+            background: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: #0f172a;
           }
+
+          #header {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 2px 2px 10px;
+          }
+
+          #title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #0f172a;
+          }
+
+          #meta {
+            font-size: 12px;
+            color: #64748b;
+          }
+
+          #chartWrap {
+            position: relative;
+          }
+
           #chart {
             width: 100%;
-            height: calc(100vh - 60px);
+            height: calc(100vh - 76px);
+            min-height: 340px;
           }
-          #info {
-            padding: 10px;
-            font-size: 14px;
-            color: #333;
+
+          #tooltip {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 10;
+            display: none;
+            min-width: 150px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.92);
+            color: #ffffff;
+            pointer-events: none;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+            font-size: 12px;
+            line-height: 1.45;
+          }
+
+          #tooltip .time {
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 4px;
+          }
+
+          #tooltip .price {
+            color: #dbeafe;
           }
         </style>
       </head>
       <body>
-        <div id="info">
-          <strong>${widget.symbol}</strong> - loading...
+        <div id="header">
+          <div id="title">${widget.symbol}</div>
+          <div id="meta">Last updated: loading</div>
         </div>
-        <div id="chart"></div>
+
+        <div id="chartWrap">
+          <div id="tooltip"></div>
+          <div id="chart"></div>
+        </div>
 
         <script>
-          const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+          const chartEl = document.getElementById('chart');
+          const tooltip = document.getElementById('tooltip');
+          const tvSymbol = '${widget.symbol}';
+          const interval = '${widget.interval}';
+          const range = '${widget.range}';
+          const isIntraday = interval.endsWith('m') || interval.endsWith('h');
+
+          const chart = LightweightCharts.createChart(chartEl, {
             layout: {
               background: { color: '#ffffff' },
-              textColor: '#333',
+              textColor: '#334155',
             },
             grid: {
-              vertLines: { color: '#f0f0f0' },
-              horzLines: { color: '#f0f0f0' },
+              vertLines: { color: '#eef2f7' },
+              horzLines: { color: '#eef2f7' },
+            },
+            rightPriceScale: {
+              borderColor: '#e2e8f0',
             },
             timeScale: {
               timeVisible: true,
               secondsVisible: false,
+              borderColor: '#e2e8f0',
             },
-            width: document.getElementById('chart').clientWidth,
-            height: document.getElementById('chart').clientHeight,
+            localization: {
+              timeFormatter: (time) => formatChartTime(time, isIntraday),
+            },
+            width: chartEl.clientWidth,
+            height: chartEl.clientHeight,
           });
 
           const candlestickSeries = chart.addCandlestickSeries({
-            upColor: '#ef5350',
-            downColor: '#26a69a',
+            upColor: '#ef4444',
+            downColor: '#3b82f6',
             borderVisible: false,
-            wickUpColor: '#ef5350',
-            wickDownColor: '#26a69a',
+            wickUpColor: '#ef4444',
+            wickDownColor: '#3b82f6',
           });
 
           const symbolMap = {
@@ -108,10 +178,90 @@ class _TradingViewChartState extends State<TradingViewChart> {
             'NASDAQ:NVDA': 'NVDA'
           };
 
-          const tvSymbol = '${widget.symbol}';
           const yahooSymbol = symbolMap[tvSymbol] || tvSymbol.split(':').pop() || tvSymbol;
-          const interval = '${widget.interval}';
-          const range = '${widget.range}';
+
+          function pad(value) {
+            return String(value).padStart(2, '0');
+          }
+
+          function formatChartTime(time, intraday) {
+            let date = null;
+
+            if (typeof time === 'number') {
+              date = new Date(time * 1000);
+            } else if (typeof time === 'string') {
+              date = new Date(time);
+            } else if (time && typeof time === 'object') {
+              const year = time.year || 1970;
+              const month = time.month || 1;
+              const day = time.day || 1;
+              const hour = time.hour || 0;
+              const minute = time.minute || 0;
+              date = new Date(Date.UTC(year, month - 1, day, hour, minute));
+            }
+
+            if (!date || Number.isNaN(date.getTime())) {
+              return '';
+            }
+
+            const parts = new Intl.DateTimeFormat('ko-KR', {
+              timeZone: 'Asia/Seoul',
+              year: '2-digit',
+              month: '2-digit',
+              day: '2-digit',
+              hour: intraday ? '2-digit' : undefined,
+              minute: intraday ? '2-digit' : undefined,
+              hour12: false,
+            }).formatToParts(date);
+
+            const map = {};
+            for (const part of parts) {
+              if (part.type !== 'literal') {
+                map[part.type] = part.value;
+              }
+            }
+
+            const yy = map.year || String(date.getFullYear()).slice(-2);
+            const mm = map.month || pad(date.getMonth() + 1);
+            const dd = map.day || pad(date.getDate());
+
+            if (!intraday) {
+              return yy + '/' + mm + '/' + dd;
+            }
+
+            const hh = map.hour || pad(date.getHours());
+            const mi = map.minute || pad(date.getMinutes());
+            return yy + '/' + mm + '/' + dd + ' ' + hh + ':' + mi;
+          }
+
+          function formatRefreshTime(iso) {
+            if (!iso) return 'loading';
+            const date = new Date(iso);
+            if (Number.isNaN(date.getTime())) return 'loading';
+
+            const parts = new Intl.DateTimeFormat('ko-KR', {
+              timeZone: 'Asia/Seoul',
+              year: '2-digit',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }).formatToParts(date);
+
+            const map = {};
+            for (const part of parts) {
+              if (part.type !== 'literal') {
+                map[part.type] = part.value;
+              }
+            }
+
+            return (map.year || '') + '/' + (map.month || '') + '/' + (map.day || '') + ' ' + (map.hour || '') + ':' + (map.minute || '');
+          }
+
+          function hideTooltip() {
+            tooltip.style.display = 'none';
+          }
 
           fetch('https://news-summarizer.bum2432.workers.dev/api/chart-data?symbol=' + encodeURIComponent(yahooSymbol) + '&interval=' + encodeURIComponent(interval) + '&range=' + encodeURIComponent(range))
             .then(response => {
@@ -127,21 +277,47 @@ class _TradingViewChartState extends State<TradingViewChart> {
               candlestickSeries.setData(candleData);
               chart.timeScale().fitContent();
 
-              const lastCandle = candleData[candleData.length - 1];
-              const prevCandle = candleData[candleData.length - 2];
-              const lastPrice = lastCandle.close.toFixed(2);
-              const change = prevCandle ? ((lastCandle.close - prevCandle.close) / prevCandle.close * 100).toFixed(2) : 0;
+              document.getElementById('meta').textContent =
+                'Last updated: ' + formatRefreshTime(result.fetchedAt);
 
-              document.getElementById('info').innerHTML =
-                '<strong>${widget.symbol}</strong> - 현재가: ' + lastPrice + ' (' + (change >= 0 ? '+' : '') + change + '%)';
+              chart.subscribeCrosshairMove(param => {
+                if (!param || !param.time || !param.point) {
+                  hideTooltip();
+                  return;
+                }
+
+                const data = param.seriesData.get(candlestickSeries);
+                if (!data) {
+                  hideTooltip();
+                  return;
+                }
+
+                const formattedTime = formatChartTime(param.time, isIntraday);
+                if (!formattedTime) {
+                  hideTooltip();
+                  return;
+                }
+
+                const change = data.open ? ((data.close - data.open) / data.open) * 100 : 0;
+                const direction = change >= 0 ? '+' : '';
+
+                tooltip.style.display = 'block';
+                tooltip.style.left = Math.min(param.point.x + 12, chartEl.clientWidth - 180) + 'px';
+                tooltip.style.top = Math.max(12, param.point.y - 72) + 'px';
+                tooltip.innerHTML =
+                  '<div class="time">' + formattedTime + '</div>' +
+                  '<div>O ' + Number(data.open).toFixed(2) + '</div>' +
+                  '<div>H ' + Number(data.high).toFixed(2) + '</div>' +
+                  '<div>L ' + Number(data.low).toFixed(2) + '</div>' +
+                  '<div class="price">C ' + Number(data.close).toFixed(2) + ' (' + direction + change.toFixed(2) + '%)</div>';
+              });
             })
-            .catch(err => {
-              document.getElementById('info').innerHTML =
-                '<strong>${widget.symbol}</strong> - 데이터를 불러오지 못했습니다. (' + err.message + ')';
+            .catch(() => {
+              document.getElementById('meta').textContent = 'Last updated: unavailable';
             });
 
           window.addEventListener('resize', () => {
-            chart.resize(document.getElementById('chart').clientWidth, document.getElementById('chart').clientHeight);
+            chart.resize(chartEl.clientWidth, chartEl.clientHeight);
           });
         </script>
       </body>

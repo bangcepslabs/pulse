@@ -6,11 +6,12 @@ import 'dart:async';
 import '../models/trend_item.dart';
 import '../models/trend_insight.dart';
 import '../services/api_service.dart';
+import '../services/theme_controller.dart';
 import '../utils/news_grouping.dart';
 import '../widgets/app_drawer.dart';
 import 'landing_screen.dart';
 import 'fear_greed_page.dart';
-import 'market_page.dart';
+import 'package:pulse/screens/market_page.dart';
 
 // ── 분야별 탭 설정 ──────────────────────────────
 const List<Map<String, dynamic>> kCategories = [
@@ -199,6 +200,12 @@ class _HomeScreenState extends State<HomeScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final surface = isDark ? const Color(0xFF111827) : const Color(0xFFF8FBFF);
+        final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+        final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
+        final secondaryText = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+
         return DraggableScrollableSheet(
           initialChildSize: 0.82,
           minChildSize: 0.45,
@@ -207,7 +214,7 @@ class _HomeScreenState extends State<HomeScreen>
             return ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
               child: ColoredBox(
-                color: const Color(0xFFF8FBFF),
+                color: surface,
                 child: SafeArea(
                   top: false,
                   child: FutureBuilder<List<TrendItem>>(
@@ -233,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen>
                               width: 42,
                               height: 4,
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade300,
+                                color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
                                 borderRadius: BorderRadius.circular(999),
                               ),
                             ),
@@ -241,9 +248,10 @@ class _HomeScreenState extends State<HomeScreen>
                           const SizedBox(height: 18),
                           Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
+                              color: primaryText,
                             ),
                           ),
                           const SizedBox(height: 14),
@@ -253,9 +261,14 @@ class _HomeScreenState extends State<HomeScreen>
                               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
                             )
                           else if (orderedItems.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 80),
-                              child: Center(child: Text('관련 뉴스가 없습니다.')),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 80),
+                              child: Center(
+                                child: Text(
+                                  '관련 뉴스가 없습니다.',
+                                  style: TextStyle(color: secondaryText),
+                                ),
+                              ),
                             )
                           else
                             for (int i = 0; i < orderedItems.length; i++)
@@ -340,6 +353,12 @@ class _HomeScreenState extends State<HomeScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final surface = isDark ? const Color(0xFF111827) : const Color(0xFFF8FBFF);
+        final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+        final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
+        final secondaryText = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+
         return DraggableScrollableSheet(
           initialChildSize: 0.82,
           minChildSize: 0.45,
@@ -349,7 +368,7 @@ class _HomeScreenState extends State<HomeScreen>
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(28)),
               child: ColoredBox(
-                color: const Color(0xFFF8FBFF),
+                color: surface,
                 child: SafeArea(
                   top: false,
                   child: FutureBuilder<List<TrendItem>>(
@@ -374,7 +393,7 @@ class _HomeScreenState extends State<HomeScreen>
                               width: 42,
                               height: 4,
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade300,
+                                color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
                                 borderRadius: BorderRadius.circular(999),
                               ),
                             ),
@@ -382,9 +401,10 @@ class _HomeScreenState extends State<HomeScreen>
                           const SizedBox(height: 18),
                           Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
+                              color: primaryText,
                             ),
                           ),
                           const SizedBox(height: 14),
@@ -397,9 +417,14 @@ class _HomeScreenState extends State<HomeScreen>
                               ),
                             )
                           else if (orderedItems.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 80),
-                              child: Center(child: Text('관련 뉴스가 없습니다.')),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 80),
+                              child: Center(
+                                child: Text(
+                                  '관련 뉴스가 없습니다.',
+                                  style: TextStyle(color: secondaryText),
+                                ),
+                              ),
                             )
                           else
                             for (int i = 0; i < orderedItems.length; i++)
@@ -442,6 +467,11 @@ class _HomeScreenState extends State<HomeScreen>
         final insight = snapshot.data!;
         final topKeywords = insight.keywords;
         final rising = insight.risingIssues;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final surface = isDark ? const Color(0xFF111827) : Colors.white;
+        final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+        final primaryText = Theme.of(context).colorScheme.onSurface;
+        final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
         final topLine = topKeywords.isEmpty
             ? '오늘 새 이슈를 수집하고 있어요.'
             : '지금 ${topKeywords.take(3).map((e) => e.keyword).join(', ')} 이슈가 많이 언급되고 있어요.';
@@ -452,12 +482,12 @@ class _HomeScreenState extends State<HomeScreen>
             height: 360,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: surface,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
+                border: Border.all(color: border),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: isDark ? Colors.black.withOpacity(0.22) : Colors.black.withOpacity(0.04),
                     blurRadius: 12,
                     offset: const Offset(0, 6),
                   ),
@@ -473,22 +503,23 @@ class _HomeScreenState extends State<HomeScreen>
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.indigo.shade50,
+                            color: isDark ? const Color(0xFF172554) : const Color(0xFFEAF1FF),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
                             Icons.radar_rounded,
-                            color: Colors.indigo.shade600,
+                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
                             size: 18,
                           ),
                         ),
                         const SizedBox(width: 10),
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             '오늘의 한 줄 트렌드',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w900,
+                              color: primaryText,
                             ),
                           ),
                         ),
@@ -499,7 +530,11 @@ class _HomeScreenState extends State<HomeScreen>
                               _insightFuture = _api.fetchTrendInsights();
                             });
                           },
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
+                          icon: Icon(
+                            Icons.refresh_rounded,
+                            size: 20,
+                            color: secondaryText,
+                          ),
                         ),
                       ],
                     ),
@@ -509,7 +544,7 @@ class _HomeScreenState extends State<HomeScreen>
                       style: TextStyle(
                         fontSize: 14,
                         height: 1.45,
-                        color: Colors.grey.shade700,
+                        color: secondaryText,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -573,16 +608,21 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildNewsSearchHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
+    final secondaryText = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.025),
+              color: isDark ? Colors.black.withOpacity(0.22) : Colors.black.withOpacity(0.025),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -598,23 +638,23 @@ class _HomeScreenState extends State<HomeScreen>
                   Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEEF4FF),
+                      color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       Icons.search_rounded,
                       size: 17,
-                      color: Colors.blue.shade700,
+                      color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
                     ),
                   ),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '뉴스 검색',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
+                        color: primaryText,
                       ),
                     ),
                   ),
@@ -837,12 +877,20 @@ class _HomeScreenState extends State<HomeScreen>
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFFF7FBFF),
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF111827)
+            : const Color(0xFFF7FBFF),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFDDE9FF)),
+          border: Border.all(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xFF1F2937)
+                : const Color(0xFFDDE9FF),
+          ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF2563EB).withOpacity(0.05),
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.black.withOpacity(0.24)
+                  : const Color(0xFF2563EB).withOpacity(0.05),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
@@ -875,23 +923,27 @@ class _HomeScreenState extends State<HomeScreen>
                             Container(
                               padding: const EdgeInsets.all(7),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFDDE9FF),
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? const Color(0xFF172554)
+                                  : const Color(0xFFDDE9FF),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Icon(
                                 Icons.auto_awesome_rounded,
                                 size: 17,
-                                color: Colors.blue.shade700,
+                                color: Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.blue.shade200
+                                    : Colors.blue.shade700,
                               ),
                             ),
                             const SizedBox(width: 10),
-                            const Expanded(
+                            Expanded(
                               child: Text(
                                 '오늘의 TOP 뉴스',
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF0F172A),
+                                  color: Theme.of(context).colorScheme.onSurface,
                                 ),
                               ),
                             ),
@@ -901,7 +953,9 @@ class _HomeScreenState extends State<HomeScreen>
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.blueGrey.shade700,
+                                  color: Theme.of(context).brightness == Brightness.dark
+                                      ? Colors.grey.shade400
+                                      : Colors.blueGrey.shade700,
                                 ),
                               ),
                             const SizedBox(width: 8),
@@ -909,7 +963,9 @@ class _HomeScreenState extends State<HomeScreen>
                               _isFeaturedExpanded
                                   ? Icons.expand_less_rounded
                                   : Icons.expand_more_rounded,
-                              color: Colors.blueGrey.shade600,
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.grey.shade400
+                                  : Colors.blueGrey.shade600,
                             ),
                           ],
                         ),
@@ -937,7 +993,9 @@ class _HomeScreenState extends State<HomeScreen>
                                               'No featured news right now.',
                                               style: TextStyle(
                                                 fontSize: 12,
-                                                color: Colors.grey.shade500,
+                                                color: Theme.of(context).brightness == Brightness.dark
+                                                    ? Colors.grey.shade400
+                                                    : Colors.grey.shade500,
                                               ),
                                             ),
                                           ),
@@ -977,9 +1035,14 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pageBackground = isDark ? const Color(0xFF0B1220) : const Color(0xFFF8FAFC);
+    final headerBackground = isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC);
+    final headerBorder = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
+
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: pageBackground,
       drawer: AppDrawer(
         currentSection: DrawerSection.news,
         homeBuilder: (context) => LandingScreen(),
@@ -993,26 +1056,31 @@ class _HomeScreenState extends State<HomeScreen>
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: headerBackground,
                 border: Border(
-                  bottom: BorderSide(color: Colors.grey.shade200),
+                  bottom: BorderSide(color: headerBorder),
                 ),
               ),
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.menu_rounded, size: 24),
+                    icon: Icon(
+                      Icons.menu_rounded,
+                      size: 24,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
                     onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
                   const SizedBox(width: 10),
-                  const Text(
+                  Text(
                     '실시간 뉴스',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0,
+                      color: isDark ? Colors.white : Colors.black87,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1020,27 +1088,44 @@ class _HomeScreenState extends State<HomeScreen>
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
+                      color: isDark ? const Color(0xFF111827) : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(
+                        color: isDark ? Colors.grey.shade800 : const Color(0xFFE2E8F0),
+                      ),
                     ),
                     child: Text(
                       _headerTime,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.blueGrey.shade700,
+                        color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade700,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                   const Spacer(),
+                  IconButton(
+                    tooltip: isDark ? '라이트 모드' : '다크 모드',
+                    onPressed: () => ThemeController.instance.toggleThemeMode(
+                      brightness: isDark ? Brightness.dark : Brightness.light,
+                    ),
+                    icon: Icon(
+                      isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                      color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                  const SizedBox(width: 8),
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEEF4FF),
+                      color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: const Color(0xFFDCE7FF)),
+                      border: Border.all(
+                        color: isDark ? Colors.grey.shade800 : const Color(0xFFDCE7FF),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1058,7 +1143,7 @@ class _HomeScreenState extends State<HomeScreen>
                           '최근 24시간 분석',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.blue.shade700,
+                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0,
                           ),
@@ -1070,19 +1155,21 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
             Container(
-              color: const Color(0xFFF8FAFC),
+              color: headerBackground,
               padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
               child: TabBar(
                 controller: _tabController,
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
                 indicatorSize: TabBarIndicatorSize.tab,
-                labelColor: Colors.blue.shade700,
-                unselectedLabelColor: const Color(0xFF475569),
+                labelColor: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                unselectedLabelColor: isDark ? Colors.grey.shade400 : const Color(0xFF475569),
                 indicator: BoxDecoration(
-                  color: const Color(0xFFEEF4FF),
+                  color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: const Color(0xFFDCE7FF)),
+                  border: Border.all(
+                    color: isDark ? Colors.grey.shade800 : const Color(0xFFDCE7FF),
+                  ),
                 ),
                 indicatorPadding: EdgeInsets.zero,
                 labelPadding:
@@ -1097,7 +1184,7 @@ class _HomeScreenState extends State<HomeScreen>
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0,
                 ),
-                dividerColor: const Color(0xFFE2E8F0),
+                dividerColor: isDark ? Colors.grey.shade800 : const Color(0xFFE2E8F0),
                 tabs: [
                   for (final cat in kCategories)
                     Tab(
@@ -1141,14 +1228,15 @@ class _HomeBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return IgnorePointer(
-        child: const SizedBox.expand(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-            color: Color(0xFFF8FAFC),
-            ),
-            child: CustomPaint(
-              painter: const _HomeGridPainter(),
+      child: SizedBox.expand(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0B1220) : const Color(0xFFF8FAFC),
+          ),
+          child: const CustomPaint(
+            painter: _HomeGridPainter(),
           ),
         ),
       ),
@@ -1161,12 +1249,13 @@ class _InsightSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 186,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
+        color: isDark ? const Color(0xFF111827) : Colors.white.withOpacity(0.92),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.blue.shade50),
+        border: Border.all(color: isDark ? const Color(0xFF1F2937) : Colors.blue.shade50),
       ),
       child: const Center(
         child: CircularProgressIndicator(strokeWidth: 2),
@@ -1188,16 +1277,20 @@ class _InsightSectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = Theme.of(context).colorScheme.onSurface;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     return Row(
       children: [
-        Icon(icon, size: 17, color: Colors.blue.shade700),
+        Icon(icon, size: 17, color: isDark ? Colors.blue.shade200 : Colors.blue.shade700),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w900,
+              color: primaryText,
             ),
           ),
         ),
@@ -1205,7 +1298,7 @@ class _InsightSectionTitle extends StatelessWidget {
           trailing,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey.shade600,
+            color: secondaryText,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -1231,6 +1324,12 @@ class _AiBriefingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final titleText = Theme.of(context).colorScheme.onSurface;
+    final bodyText = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade800;
+    final mutedText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: AnimatedContainer(
@@ -1240,12 +1339,12 @@ class _AiBriefingCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: isDark ? Colors.black.withOpacity(0.28) : Colors.black.withOpacity(0.04),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
@@ -1259,7 +1358,7 @@ class _AiBriefingCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(9),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEF4FF),
+                    color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(
@@ -1269,11 +1368,11 @@ class _AiBriefingCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'AI 브리핑',
                     style: TextStyle(
-                      color: Color(0xFF0F172A),
+                      color: titleText,
                       fontSize: 18,
                       fontWeight: FontWeight.w900,
                     ),
@@ -1285,13 +1384,13 @@ class _AiBriefingCard extends StatelessWidget {
                     Icon(
                       Icons.schedule_rounded,
                       size: 13,
-                      color: Colors.grey.shade500,
+                      color: mutedText,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       'Updated $updatedAt',
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: mutedText,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1310,7 +1409,7 @@ class _AiBriefingCard extends StatelessWidget {
             Text(
               briefing,
               style: TextStyle(
-                color: Colors.blueGrey.shade800,
+                color: bodyText,
                 fontSize: 14,
                 height: 1.55,
                 fontWeight: FontWeight.w600,
@@ -1326,10 +1425,10 @@ class _AiBriefingCard extends StatelessWidget {
                     ActionChip(
                       label: Text('#${keyword.keyword}'),
                       onPressed: () => onKeywordTap(keyword),
-                      backgroundColor: const Color(0xFFF3F7FF),
-                      side: const BorderSide(color: Color(0xFFDCE7FF)),
-                      labelStyle: const TextStyle(
-                        color: Color(0xFF2563EB),
+                      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF3F7FF),
+                      side: BorderSide(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFDCE7FF)),
+                      labelStyle: TextStyle(
+                        color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1356,18 +1455,23 @@ class _TrendDashboardCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC);
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final primaryText = Theme.of(context).colorScheme.onSurface;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
     final deltaColor = trendDelta >= 0 ? const Color(0xFF2563EB) : Colors.blueGrey;
     final deltaText = trendDelta >= 0 ? '+$trendDelta' : '$trendDelta';
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: isDark ? Colors.black.withOpacity(0.24) : Colors.black.withOpacity(0.03),
             blurRadius: 12,
             offset: const Offset(0, 5),
           ),
@@ -1378,10 +1482,10 @@ class _TrendDashboardCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   '트렌드 대시보드',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: primaryText),
                 ),
               ),
               Container(
@@ -1454,12 +1558,17 @@ class _DashboardMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final primaryText = Theme.of(context).colorScheme.onSurface;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1470,7 +1579,7 @@ class _DashboardMetricCard extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 11,
-              color: Colors.grey.shade700,
+              color: secondaryText,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1481,7 +1590,7 @@ class _DashboardMetricCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w900,
-                color: color,
+                color: isDark ? Colors.white : color,
               ),
               children: [
                 TextSpan(
@@ -1518,12 +1627,15 @@ class _SearchDiscoverySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1566,6 +1678,9 @@ class _DiscoveryChipRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = Theme.of(context).colorScheme.onSurface;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     if (chips.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -1575,7 +1690,7 @@ class _DiscoveryChipRow extends StatelessWidget {
           title,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey.shade600,
+            color: secondaryText,
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -1588,9 +1703,12 @@ class _DiscoveryChipRow extends StatelessWidget {
               ActionChip(
                 label: Text(chip),
                 onPressed: () => onTap(chip),
-                backgroundColor: const Color(0xFFF8FAFC),
-                side: const BorderSide(color: Color(0xFFE2E8F0)),
-                labelStyle: const TextStyle(fontWeight: FontWeight.w700),
+                backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                side: BorderSide(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0)),
+                labelStyle: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: primaryText,
+                ),
               ),
           ],
         ),
@@ -1778,15 +1896,20 @@ class _CategoryHotCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final primaryText = Theme.of(context).colorScheme.onSurface;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     final color = _catColor(category);
 
     return Container(
       width: 210,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1801,8 +1924,7 @@ class _CategoryHotCard extends StatelessWidget {
               const SizedBox(width: 7),
               Text(
                 category,
-                style:
-                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: primaryText),
               ),
             ],
           ),
@@ -1812,7 +1934,7 @@ class _CategoryHotCard extends StatelessWidget {
               '집계 대기 중',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey.shade500,
+                color: secondaryText,
                 fontWeight: FontWeight.w700,
               ),
             )
@@ -1849,13 +1971,16 @@ class _SentimentInsightPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final temperatures = _buildSevenDayTemperatures(sentiment.temperature);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2018,6 +2143,9 @@ class _TrendSearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC);
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     return TextField(
       controller: controller,
       onSubmitted: onSubmitted,
@@ -2032,20 +2160,20 @@ class _TrendSearchBar extends StatelessWidget {
         ),
         isDense: true,
         filled: true,
-        fillColor: const Color(0xFFF8FAFC),
+        fillColor: surface,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: BorderSide(color: border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: BorderSide(color: border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.blue.shade300),
+          borderSide: BorderSide(color: isDark ? Colors.blue.shade200 : Colors.blue.shade300),
         ),
       ),
     );
@@ -2064,10 +2192,14 @@ class _KeywordChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF0F172A) : const Color(0xFFEEF4FF);
+    final innerSurface = isDark ? const Color(0xFF111827) : Colors.white.withOpacity(0.8);
+    final primary = isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB);
     const color = Color(0xFF2563EB);
 
     return Material(
-      color: const Color(0xFFEEF4FF),
+      color: surface,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
@@ -2091,13 +2223,13 @@ class _KeywordChip extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.8),
+                  color: innerSurface,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   '${keyword.newsCount}',
                   style: TextStyle(
-                    color: color,
+                    color: primary,
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                   ),
@@ -2118,6 +2250,9 @@ class _SentimentTemperatureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = Theme.of(context).colorScheme.onSurface;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     final color = sentiment.temperature >= 71
         ? Colors.green
         : sentiment.temperature <= 30
@@ -2138,10 +2273,14 @@ class _SentimentTemperatureCard extends StatelessWidget {
             children: [
               Icon(Icons.thermostat_rounded, size: 18, color: color),
               const SizedBox(width: 6),
-              const Expanded(
+              Expanded(
                 child: Text(
                   '오늘 뉴스 감정온도',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: primaryText,
+                  ),
                 ),
               ),
               Text(
@@ -2160,7 +2299,7 @@ class _SentimentTemperatureCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: sentiment.temperature / 100,
               minHeight: 8,
-              backgroundColor: Colors.white.withOpacity(0.8),
+              backgroundColor: isDark ? const Color(0xFF1F2937) : Colors.white.withOpacity(0.8),
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
@@ -2170,7 +2309,7 @@ class _SentimentTemperatureCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               height: 1.4,
-              color: Colors.grey.shade700,
+              color: secondaryText,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -2179,7 +2318,7 @@ class _SentimentTemperatureCard extends StatelessWidget {
             '긍정 ${sentiment.positiveRatio}% · 중립 ${sentiment.neutralRatio}% · 부정 ${sentiment.negativeRatio}%',
             style: TextStyle(
               fontSize: 11,
-              color: Colors.grey.shade600,
+              color: secondaryText,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -2203,11 +2342,16 @@ class _RisingIssueTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _catColor(issue.category);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: Colors.white,
+        color: surface,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
@@ -2219,10 +2363,10 @@ class _RisingIssueTile extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: border),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
+                  color: isDark ? Colors.black.withOpacity(0.20) : Colors.black.withOpacity(0.02),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -2263,9 +2407,10 @@ class _RisingIssueTile extends StatelessWidget {
                     children: [
                       Text(
                         issue.keyword,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w900,
+                          color: primaryText,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -2275,7 +2420,7 @@ class _RisingIssueTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey.shade600,
+                          color: secondaryText,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -2307,17 +2452,20 @@ class _InsightEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : const Color(0xFFF8FBFF);
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFF),
+        color: surface,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Text(
         message,
         style: TextStyle(
-          color: Colors.grey.shade600,
+          color: secondaryText,
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),
@@ -2390,6 +2538,14 @@ class _MajorNewsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardSurface = isDark ? const Color(0xFF111827) : Colors.white;
+    final cardBorder = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final titleText = Theme.of(context).colorScheme.onSurface;
+    final bodyText = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade800;
+    final mutedText = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade600;
+    final chipBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFEEF4FF);
+    final chipBorder = isDark ? const Color(0xFF1F2937) : const Color(0xFFDCE7FF);
     final timeAgo = _timeAgo(trend.published);
     final chipLabel = trend.category.isEmpty ? 'General' : trend.category;
     final isTopStory = index == 0;
@@ -2419,16 +2575,14 @@ class _MajorNewsCard extends StatelessWidget {
             width: isFeatured ? 268 : 242,
             height: isFeatured ? 188 : 176,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: cardSurface,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: isTopStory
-                    ? const Color(0xFFDCE7FF)
-                    : const Color(0xFFE2E8F0),
+                color: isTopStory ? chipBorder : cardBorder,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(isFeatured ? 0.06 : 0.04),
+                  color: isDark ? Colors.black.withOpacity(0.24) : Colors.black.withOpacity(isFeatured ? 0.06 : 0.04),
                   blurRadius: isFeatured ? 16 : 12,
                   offset: const Offset(0, 6),
                 ),
@@ -2450,8 +2604,8 @@ class _MajorNewsCard extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: isTopStory
-                              ? const Color(0xFFFFF7E6)
-                              : const Color(0xFFF5F7FB),
+                              ? (isDark ? const Color(0xFF3F2D12) : const Color(0xFFFFF7E6))
+                              : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF5F7FB)),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
@@ -2460,8 +2614,8 @@ class _MajorNewsCard extends StatelessWidget {
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
                             color: isTopStory
-                                ? const Color(0xFFB45309)
-                                : Colors.blueGrey.shade600,
+                                ? (isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))
+                                : mutedText,
                           ),
                         ),
                       ),
@@ -2470,11 +2624,11 @@ class _MajorNewsCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     trend.koreanTitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w800,
                       height: 1.28,
-                      color: Color(0xFF0F172A),
+                      color: titleText,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -2489,15 +2643,15 @@ class _MajorNewsCard extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEEF4FF),
+                            color: chipBg,
                             borderRadius: BorderRadius.circular(999),
                           ),
-                          child: const Text(
+                          child: Text(
                             '핵심',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF2563EB),
+                              color: isDark ? Colors.blue.shade200 : const Color(0xFF2563EB),
                             ),
                           ),
                         ),
@@ -2507,7 +2661,7 @@ class _MajorNewsCard extends StatelessWidget {
                         trend.source,
                         style: TextStyle(
                           fontSize: 10.5,
-                          color: Colors.blueGrey.shade600,
+                          color: mutedText,
                           fontWeight: FontWeight.w600,
                         ),
                         maxLines: 1,
@@ -2520,7 +2674,7 @@ class _MajorNewsCard extends StatelessWidget {
                     timeAgo.isEmpty ? 'just now' : timeAgo,
                     style: TextStyle(
                       fontSize: 10.5,
-                      color: Colors.blueGrey.shade500,
+                      color: isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -2558,9 +2712,14 @@ class _AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final drawerBg = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final topBorder = isDark ? const Color(0xFF1F2937) : Colors.grey.shade200;
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     return Drawer(
       child: Container(
-        color: Colors.white,
+        color: drawerBg,
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2573,8 +2732,8 @@ class _AppDrawer extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Colors.blue.shade600,
-                      Colors.blue.shade400,
+                      isDark ? Colors.blue.shade800 : Colors.blue.shade600,
+                      isDark ? Colors.blue.shade700 : Colors.blue.shade400,
                     ],
                   ),
                 ),
@@ -2585,7 +2744,7 @@ class _AppDrawer extends StatelessWidget {
                       children: [
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: isDark ? const Color(0xFF111827) : Colors.white,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           padding: const EdgeInsets.all(12),
@@ -2600,22 +2759,22 @@ class _AppDrawer extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        const Text(
+                        Text(
                           'Pulse',
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: primaryText,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       '실시간 트렌드 분석',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white70,
+                        color: secondaryText,
                       ),
                     ),
                   ],
@@ -2687,7 +2846,7 @@ class _AppDrawer extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: Colors.grey.shade200),
+                    top: BorderSide(color: topBorder),
                   ),
                 ),
                 child: Column(
@@ -2696,13 +2855,13 @@ class _AppDrawer extends StatelessWidget {
                     Row(
                       children: [
                         Icon(Icons.info_outline,
-                            size: 16, color: Colors.grey[600]),
+                            size: 16, color: secondaryText),
                         const SizedBox(width: 8),
                         Text(
                           'Version 1.0.0',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[600],
+                            color: secondaryText,
                           ),
                         ),
                       ],
@@ -2758,16 +2917,23 @@ class _DrawerMenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final titleText = isDark ? Colors.white : Colors.black87;
+    final subtitleText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     return ListTile(
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: isComingSoon ? Colors.grey.shade100 : Colors.blue.shade50,
+          color: isComingSoon
+              ? (isDark ? const Color(0xFF1F2937) : Colors.grey.shade100)
+              : (isDark ? const Color(0xFF172554) : Colors.blue.shade50),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
           icon,
-          color: isComingSoon ? Colors.grey.shade400 : Colors.blue,
+          color: isComingSoon
+              ? (isDark ? Colors.grey.shade500 : Colors.grey.shade400)
+              : (isDark ? Colors.blue.shade200 : Colors.blue),
           size: 24,
         ),
       ),
@@ -2778,7 +2944,7 @@ class _DrawerMenuItem extends StatelessWidget {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: isComingSoon ? Colors.grey.shade400 : Colors.black87,
+              color: isComingSoon ? subtitleText : titleText,
             ),
           ),
           if (isComingSoon) ...[
@@ -2805,7 +2971,7 @@ class _DrawerMenuItem extends StatelessWidget {
         subtitle,
         style: TextStyle(
           fontSize: 12,
-          color: Colors.grey.shade600,
+          color: subtitleText,
         ),
       ),
       onTap: onTap,
@@ -3116,9 +3282,14 @@ class _TrendCardState extends State<_TrendCard>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = ThemeController.instance.mode.value == ThemeMode.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
+    final secondaryText = isDark ? Colors.grey.shade200 : Colors.blueGrey.shade500;
     final timeStr = _timeAgo(widget.trend.published);
     final isTop3 = widget.rank <= 3;
-    final accent = isTop3 ? const Color(0xFF2563EB) : Colors.blueGrey.shade400;
+    final accent = isTop3 ? const Color(0xFF2563EB) : (isDark ? Colors.grey.shade400 : Colors.blueGrey.shade400);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -3141,22 +3312,14 @@ class _TrendCardState extends State<_TrendCard>
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   curve: Curves.easeOut,
-                  transform: Matrix4.translationValues(
-                    0,
-                    _isHovered ? -2 : 0,
-                    0,
-                  ),
+                  transform: Matrix4.translationValues(0, _isHovered ? -2 : 0, 0),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    color: Colors.white,
-                    border: Border.all(
-                      color: isTop3
-                          ? const Color(0xFFDCE7FF)
-                          : const Color(0xFFE2E8F0),
-                    ),
+                    color: surface,
+                    border: Border.all(color: border),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(isTop3 ? 0.05 : 0.03),
+                        color: isDark ? Colors.black.withOpacity(0.24) : Colors.black.withOpacity(isTop3 ? 0.05 : 0.03),
                         blurRadius: isTop3 ? 14 : 10,
                         offset: const Offset(0, 4),
                       ),
@@ -3172,8 +3335,8 @@ class _TrendCardState extends State<_TrendCard>
                           height: 32,
                           decoration: BoxDecoration(
                             color: isTop3
-                                ? const Color(0xFFEEF4FF)
-                                : const Color(0xFFF8FAFC),
+                                ? (isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF))
+                                : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Center(
@@ -3194,11 +3357,11 @@ class _TrendCardState extends State<_TrendCard>
                             children: [
                               Text(
                                 widget.trend.koreanTitle,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 14.5,
                                   fontWeight: FontWeight.w700,
                                   height: 1.3,
-                                  color: Color(0xFF0F172A),
+                                  color: primaryText,
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -3207,21 +3370,16 @@ class _TrendCardState extends State<_TrendCard>
                               Row(
                                 children: [
                                   _CategoryBadge(
-                                    category: widget.trend.category.isEmpty
-                                        ? 'General'
-                                        : widget.trend.category,
+                                    category: widget.trend.category.isEmpty ? 'General' : widget.trend.category,
                                     color: accent,
                                     isImportant: false,
                                   ),
                                   const SizedBox(width: 8),
                                   if (widget.trend.importance >= 4)
                                     Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFEEF4FF),
+                                        color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                                         borderRadius: BorderRadius.circular(999),
                                       ),
                                       child: const Text(
@@ -3233,17 +3391,13 @@ class _TrendCardState extends State<_TrendCard>
                                         ),
                                       ),
                                     ),
-                                  if (widget.trend.importance >= 4)
-                                    const SizedBox(width: 8),
+                                  if (widget.trend.importance >= 4) const SizedBox(width: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: isTop3
-                                          ? const Color(0xFFFFF7E6)
-                                          : const Color(0xFFF6F7F9),
+                                          ? (isDark ? const Color(0xFF3F2D12) : const Color(0xFFFFF7E6))
+                                          : (isDark ? const Color(0xFF111827) : const Color(0xFFF6F7F9)),
                                       borderRadius: BorderRadius.circular(999),
                                     ),
                                     child: Text(
@@ -3252,8 +3406,8 @@ class _TrendCardState extends State<_TrendCard>
                                         fontSize: 10,
                                         fontWeight: FontWeight.w800,
                                         color: isTop3
-                                            ? const Color(0xFFB45309)
-                                            : Colors.blueGrey.shade600,
+                                            ? (isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))
+                                            : secondaryText,
                                       ),
                                     ),
                                   ),
@@ -3261,14 +3415,14 @@ class _TrendCardState extends State<_TrendCard>
                                   Icon(
                                     Icons.access_time_rounded,
                                     size: 12,
-                                    color: Colors.blueGrey.shade400,
+                                    color: secondaryText,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
                                     timeStr,
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: Colors.blueGrey.shade500,
+                                      color: secondaryText,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -3302,11 +3456,15 @@ class _CategoryBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xFFEEF4FF),
+        color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFDCE7FF), width: 1),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1E3A8A) : const Color(0xFFDCE7FF),
+          width: 1,
+        ),
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(
@@ -3318,7 +3476,7 @@ class _CategoryBadge extends StatelessWidget {
           style: TextStyle(
             fontSize: isImportant ? 11 : 10.5,
             fontWeight: FontWeight.bold,
-            color: const Color(0xFF2563EB),
+            color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
           ),
         ),
       ),
@@ -3335,6 +3493,12 @@ class _DetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF0B1220) : Colors.white;
+    final border = isDark ? const Color(0xFF243041) : const Color(0xFFE2E8F0);
+    final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
+    final secondaryText = isDark ? Colors.grey.shade100 : Colors.grey.shade600;
+    final subtleText = isDark ? Colors.grey.shade100 : Colors.grey.shade500;
     final catColor = _catColor(trend.category);
 
     return GestureDetector(
@@ -3347,7 +3511,7 @@ class _DetailSheet extends StatelessWidget {
           minChildSize: 0.4,
           maxChildSize: 0.95,
           builder: (_, ctrl) => ColoredBox(
-            color: Colors.white,
+            color: surface,
             child: SafeArea(
               top: false,
               child: ListView(
@@ -3360,7 +3524,7 @@ class _DetailSheet extends StatelessWidget {
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.grey[300],
+                        color: isDark ? Colors.grey.shade700 : Colors.grey[300],
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -3377,7 +3541,7 @@ class _DetailSheet extends StatelessWidget {
                               horizontal: 10, vertical: 4),
                           child: Text(
                             trend.category,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.white,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
@@ -3391,7 +3555,8 @@ class _DetailSheet extends StatelessWidget {
                           trend.source,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[500],
+                          color: isDark ? Colors.white : subtleText,
+                            fontWeight: FontWeight.w600,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -3399,17 +3564,22 @@ class _DetailSheet extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         _timeAgo(trend.published),
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.grey.shade100 : subtleText,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 14),
                   Text(
                     trend.koreanTitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 21,
                       fontWeight: FontWeight.w800,
                       height: 1.4,
+                      color: primaryText,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -3417,25 +3587,27 @@ class _DetailSheet extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEAF1FF),
+                      color: isDark ? const Color(0xFF172554) : const Color(0xFFEAF1FF),
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: const Color(0xFFDDE9FF)),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF1E3A8A) : const Color(0xFFDDE9FF),
+                      ),
                     ),
                     child: Text(
                       trend.importance >= 4 ? '핵심 이슈' : '일반 이슈',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF2563EB),
+                        color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
                       ),
                     ),
                   ),
                   const SizedBox(height: 18),
                   DecoratedBox(
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFAFAFA),
+                      color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFAFA),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFEEEEEE)),
+                      border: Border.all(color: border),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -3443,7 +3615,12 @@ class _DetailSheet extends StatelessWidget {
                         trend.summaryKr.isNotEmpty
                             ? trend.summaryKr
                             : 'Summary not available.',
-                        style: const TextStyle(fontSize: 15, height: 1.7),
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.7,
+                          color: isDark ? Colors.grey.shade100 : secondaryText,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ),
@@ -3459,11 +3636,12 @@ class _DetailSheet extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.blue,
+                          backgroundColor: const Color(0xFF2563EB),
                         ),
                       ),
                     ),
@@ -3495,21 +3673,24 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.grey.shade400 : const Color(0xFF9E9E9E);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.cloud_off_rounded,
-              size: 64, color: Color(0xFFDDDDDD)),
+          Icon(Icons.cloud_off_rounded,
+              size: 64, color: isDark ? Colors.grey.shade600 : const Color(0xFFDDDDDD)),
           const SizedBox(height: 16),
-          const Text('백엔드 서버 연결 중...',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text('백엔드 서버 연결 중...',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryText)),
           const SizedBox(height: 8),
-          const Text('https://news-summarizer.bum2432.workers.dev',
-              style: TextStyle(fontSize: 13, color: Color(0xFF9E9E9E))),
+          Text('https://news-summarizer.bum2432.workers.dev',
+              style: TextStyle(fontSize: 13, color: secondaryText)),
           const SizedBox(height: 4),
-          const Text('Ollama 분석 완료 후 자동 로드됩니다',
-              style: TextStyle(fontSize: 12, color: Color(0xFFBDBDBD))),
+          Text('Ollama 분석 완료 후 자동 로드됩니다',
+              style: TextStyle(fontSize: 12, color: secondaryText)),
           const SizedBox(height: 24),
           const SizedBox(
               width: 24,
@@ -3534,19 +3715,22 @@ class _EmptyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.grey.shade400 : const Color(0xFF9E9E9E);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.newspaper, size: 60, color: Color(0xFFDDDDDD)),
+          Icon(Icons.newspaper, size: 60, color: isDark ? Colors.grey.shade600 : const Color(0xFFDDDDDD)),
           const SizedBox(height: 12),
           Text('$label 뉴스가 없습니다',
-              style: const TextStyle(color: Color(0xFF9E9E9E))),
+              style: TextStyle(color: secondaryText)),
           const SizedBox(height: 16),
           TextButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh),
-            label: const Text('새로고침'),
+            label: Text('새로고침', style: TextStyle(color: primaryText)),
           ),
         ],
       ),

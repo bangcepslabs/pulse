@@ -5,10 +5,11 @@ import 'package:http/http.dart' as http;
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 
 import '../services/api_service.dart';
+import '../services/theme_controller.dart';
 import '../widgets/app_drawer.dart';
 import 'home_screen.dart';
 import 'landing_screen.dart';
-import 'market_page.dart';
+import 'package:pulse/screens/market_page.dart';
 
 class FearGreedPage extends StatefulWidget {
   const FearGreedPage({super.key});
@@ -68,10 +69,14 @@ class _FearGreedPageState extends State<FearGreedPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF0B1220) : const Color(0xFFF6F8FB);
+    final appBarBg = isDark ? const Color(0xFF111827) : Colors.white;
+    final appBarFg = isDark ? Colors.white : Colors.black87;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF6F8FB),
+        backgroundColor: bg,
         drawer: AppDrawer(
           currentSection: DrawerSection.fearGreed,
           homeBuilder: (context) => LandingScreen(),
@@ -82,31 +87,41 @@ class _FearGreedPageState extends State<FearGreedPage> {
         appBar: AppBar(
           leading: Builder(
             builder: (context) => IconButton(
-              icon: const Icon(Icons.menu_rounded),
+              icon: Icon(Icons.menu_rounded, color: appBarFg),
               onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),
-          title: const Text(
+          title: Text(
             '공포탐욕지수',
             style: TextStyle(
-              color: Colors.black87,
+              color: appBarFg,
               fontWeight: FontWeight.w900,
             ),
           ),
-          backgroundColor: Colors.white,
+          backgroundColor: appBarBg,
           elevation: 0,
-          iconTheme: const IconThemeData(color: Colors.black87),
+          iconTheme: IconThemeData(color: appBarFg),
           actions: [
+            IconButton(
+              tooltip: isDark ? '라이트 모드' : '다크 모드',
+              onPressed: () => ThemeController.instance.toggleThemeMode(
+                brightness: isDark ? Brightness.dark : Brightness.light,
+              ),
+              icon: Icon(
+                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+              ),
+            ),
             IconButton(
               tooltip: '새로고침',
               onPressed: _reload,
-              icon: const Icon(Icons.refresh_rounded),
+              icon: Icon(Icons.refresh_rounded, color: appBarFg),
             ),
           ],
           bottom: TabBar(
-            labelColor: Colors.blue.shade800,
-            unselectedLabelColor: Colors.grey.shade600,
-            indicatorColor: Colors.blue.shade700,
+            labelColor: isDark ? Colors.blue.shade200 : Colors.blue.shade800,
+            unselectedLabelColor: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+            indicatorColor: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
             labelStyle: const TextStyle(fontWeight: FontWeight.w900),
             tabs: const [
               Tab(text: '증시'),
@@ -266,6 +281,8 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
@@ -273,10 +290,10 @@ class _SectionHeader extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w900,
-              color: Colors.black87,
+              color: colors.onSurface,
             ),
           ),
           const SizedBox(height: 6),
@@ -285,7 +302,7 @@ class _SectionHeader extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               height: 1.45,
-              color: Colors.grey.shade700,
+              color: isDark ? colors.onSurfaceVariant : const Color(0xFF475569),
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -310,18 +327,24 @@ class _GaugeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final width = MediaQuery.of(context).size.width;
     final gaugeSize = width < 640 ? width * 0.72 : 360.0;
+    final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final primaryText = colors.onSurface;
+    final secondaryText = isDark ? colors.onSurfaceVariant : const Color(0xFF475569);
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardBg,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: isDark ? Colors.black.withOpacity(0.28) : Colors.black.withOpacity(0.04),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -351,10 +374,10 @@ class _GaugeCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w900,
-                        color: Colors.black87,
+                        color: primaryText,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -362,7 +385,7 @@ class _GaugeCard extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey.shade600,
+                        color: secondaryText,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -410,7 +433,7 @@ class _GaugeCard extends StatelessWidget {
                       GaugeRange(
                         startValue: 75,
                         endValue: 100,
-                        color: Colors.green.shade600,
+                        color: isDark ? Colors.green.shade300 : Colors.green.shade600,
                       ),
                     ],
                     pointers: [
@@ -418,11 +441,11 @@ class _GaugeCard extends StatelessWidget {
                         value: index.score.toDouble(),
                         enableAnimation: true,
                         animationDuration: 900,
-                        needleColor: Colors.black87,
+                        needleColor: primaryText,
                         needleLength: 0.72,
                         needleStartWidth: 1,
                         needleEndWidth: 5,
-                        knobStyle: const KnobStyle(color: Colors.black87),
+                        knobStyle: KnobStyle(color: primaryText),
                       ),
                     ],
                   ),
@@ -438,7 +461,7 @@ class _GaugeCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: width < 640 ? 38 : 46,
                     fontWeight: FontWeight.w900,
-                    color: Colors.black87,
+                    color: primaryText,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -457,7 +480,7 @@ class _GaugeCard extends StatelessWidget {
           Text(
             footer,
             style: TextStyle(
-              color: Colors.grey.shade700,
+              color: secondaryText,
               fontSize: 13,
               height: 1.5,
               fontWeight: FontWeight.w600,
@@ -467,7 +490,7 @@ class _GaugeCard extends StatelessWidget {
           Text(
             index.source,
             style: TextStyle(
-              color: Colors.grey.shade500,
+              color: isDark ? Colors.grey.shade400 : Colors.grey.shade500,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -485,6 +508,11 @@ class _ComponentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final primaryText = colors.onSurface;
     final labels = {
       'newsSentiment': '뉴스 감정',
       'issueMomentum': '이슈 강도',
@@ -495,19 +523,19 @@ class _ComponentCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardBg,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'AI 점수 구성',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w900,
-              color: Colors.black87,
+              color: primaryText,
             ),
           ),
           const SizedBox(height: 14),
@@ -535,6 +563,10 @@ class _ComponentBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = colors.onSurface;
+    final secondaryText = isDark ? colors.onSurfaceVariant : const Color(0xFF475569);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -543,17 +575,19 @@ class _ComponentBar extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
+                  color: primaryText,
                 ),
               ),
             ),
             Text(
               '$value',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w900,
+                color: primaryText,
               ),
             ),
           ],
@@ -564,7 +598,7 @@ class _ComponentBar extends StatelessWidget {
           child: LinearProgressIndicator(
             minHeight: 8,
             value: value.clamp(0, 100) / 100,
-            backgroundColor: Colors.grey.shade200,
+            backgroundColor: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0),
             valueColor: AlwaysStoppedAnimation<Color>(_scoreColor(value)),
           ),
         ),
@@ -589,23 +623,26 @@ class _ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = colors.onSurface;
+    final secondaryText = isDark ? colors.onSurfaceVariant : const Color(0xFF475569);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_rounded,
-                size: 48, color: Colors.grey.shade500),
+            Icon(Icons.cloud_off_rounded, size: 48, color: secondaryText),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               '지수를 불러오지 못했습니다.',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: primaryText),
             ),
             const SizedBox(height: 8),
             Text(
               '잠시 후 다시 시도해 주세요.',
-              style: TextStyle(color: Colors.grey.shade600),
+              style: TextStyle(color: secondaryText),
             ),
             const SizedBox(height: 18),
             FilledButton.icon(

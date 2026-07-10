@@ -4,10 +4,14 @@ import 'package:visibility_detector/visibility_detector.dart';
 import '../models/trend_insight.dart';
 import '../models/trend_item.dart';
 import '../services/api_service.dart';
+import '../services/theme_controller.dart';
 import '../utils/news_grouping.dart';
 import 'home_screen.dart';
 import 'fear_greed_page.dart';
-import 'market_page.dart';
+import './market_page.dart';
+import 'dart:convert';
+import 'dart:async';
+import 'package:http/http.dart' as http;
 
 String _landingTimeLabel() {
   final now = DateTime.now();
@@ -17,7 +21,7 @@ String _landingTimeLabel() {
 }
 
 String _landingCompactTime(String value) {
-  final parsed = DateTime.tryParse(value.trim());
+  final parsed = _landingParseTimestamp(value);
   if (parsed == null) return _landingTimeLabel();
   final diff = DateTime.now().difference(parsed);
   if (!diff.isNegative) {
@@ -32,6 +36,185 @@ String _landingCompactTime(String value) {
   return '$month.$day $hour:$minute';
 }
 
+String _landingClockLabel(DateTime? dateTime) {
+  if (dateTime == null) return '--:--';
+  final hour = dateTime.hour.toString().padLeft(2, '0');
+  final minute = dateTime.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+String _landingRelativeTimeLabel(DateTime? dateTime) {
+  if (dateTime == null) return '방금 전';
+  final diff = DateTime.now().difference(dateTime);
+  if (diff.inMinutes < 1) return '방금 전';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
+  if (diff.inHours < 24) return '${diff.inHours}시간 전';
+  return _landingCompactTime(dateTime.toIso8601String());
+}
+
+String _landingFormatCompactPrice(double value) {
+  final abs = value.abs();
+  if (abs >= 1000) return value.toStringAsFixed(0);
+  if (abs >= 100) return value.toStringAsFixed(1);
+  return value.toStringAsFixed(2);
+}
+
+String _landingFormatNumber(num value, {int decimals = 0}) {
+  final fixed = value.toStringAsFixed(decimals);
+  final parts = fixed.split('.');
+  final whole = parts[0];
+  final isNegative = whole.startsWith('-');
+  final digits = isNegative ? whole.substring(1) : whole;
+  final buffer = StringBuffer();
+  for (int i = 0; i < digits.length; i++) {
+    buffer.write(digits[i]);
+    final remaining = digits.length - i - 1;
+    if (remaining > 0 && remaining % 3 == 0) {
+      buffer.write(',');
+    }
+  }
+  final formattedWhole = isNegative ? '-${buffer.toString()}' : buffer.toString();
+  if (parts.length > 1 && decimals > 0) {
+    return '$formattedWhole.${parts[1]}';
+  }
+  return formattedWhole;
+}
+
+String _landingFormatPercent(double value) {
+  final sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  return '$sign${value.abs().toStringAsFixed(2)}%';
+}
+
+String _landingFormatPrice(
+  double value, {
+  required String marketType,
+  String? symbol,
+}) {
+  switch (marketType) {
+    case 'kr':
+      return '${_landingFormatNumber(value.round())}원';
+    case 'usd':
+      return '\$${_landingFormatNumber(value.round())}';
+    case 'index':
+      return _landingFormatNumber(value.round());
+    case 'crypto':
+      return '\$${_landingFormatNumber(value.round())}';
+    case 'fx':
+      return _landingFormatCurrencyPair(value, symbol ?? '');
+    default:
+      return _landingFormatNumber(value.round());
+  }
+}
+
+String _landingFormatCurrencyPair(double value, String pair) {
+  final upper = pair.toUpperCase();
+  if (upper.contains('EUR/USD')) {
+    return _landingFormatNumber(value, decimals: 4);
+  }
+  if (upper.contains('USD/JPY')) {
+    return _landingFormatNumber(value, decimals: 2);
+  }
+  if (upper.contains('USD/KRW')) {
+    return _landingFormatNumber(value, decimals: 2);
+  }
+  return _landingFormatNumber(value, decimals: 2);
+}
+
+String _landingFormatStockCode(String symbol) {
+  return symbol.replaceFirst(RegExp(r'\.(KS|KQ|US|NASD|NYSE|AMEX)$'), '');
+}
+
+String _landingFormatUpdatedAt(DateTime? dateTime) {
+  if (dateTime == null) return '--:--';
+  final local = dateTime.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+DateTime? _landingLatestUpdatedAt(Iterable<_LandingMarketQuote> quotes) {
+  final dates = quotes
+      .map((item) => item.priceUpdatedAt)
+      .whereType<DateTime>()
+      .toList();
+  if (dates.isEmpty) return null;
+  dates.sort();
+  return dates.last;
+}
+
+String _landingMarketPriceLabel(_LandingMarketQuote quote) {
+  switch (quote.group) {
+    case 'fx':
+      return _landingFormatCurrencyPair(quote.currentPrice, quote.title);
+    case 'crypto':
+      return _landingFormatPrice(quote.currentPrice, marketType: 'crypto');
+    case 'index':
+      return _landingFormatPrice(quote.currentPrice, marketType: 'index');
+    case 'equity':
+    default:
+      return _landingFormatPrice(quote.currentPrice, marketType: 'kr');
+  }
+}
+
+DateTime? _landingTryParseDate(String value) {
+  return _landingParseTimestamp(value);
+}
+
+DateTime? _landingParseTimestamp(String value) {
+  final raw = value.trim();
+  if (raw.isEmpty) return null;
+
+  final candidates = <String>[
+    raw,
+    raw.replaceFirst(' ', 'T'),
+    raw.replaceAll('/', '-').replaceFirst(' ', 'T'),
+  ];
+
+  for (final candidate in candidates) {
+    final parsed = DateTime.tryParse(candidate);
+    if (parsed == null) continue;
+
+    final hasTimezone = RegExp(r'(Z|[+-]\d{2}:?\d{2})$', caseSensitive: false)
+        .hasMatch(candidate);
+    if (hasTimezone) return parsed.toLocal();
+    return DateTime.utc(
+      parsed.year,
+      parsed.month,
+      parsed.day,
+      parsed.hour,
+      parsed.minute,
+      parsed.second,
+      parsed.millisecond,
+      parsed.microsecond,
+    ).toLocal();
+  }
+
+  return null;
+}
+
+String? _landingSourceLabel(String source) {
+  final value = source.trim();
+  if (value.isEmpty) return null;
+  final lower = value.toLowerCase();
+  final looksLikeUrl =
+      lower.startsWith('http://') || lower.startsWith('https://') || lower.contains('www.');
+  if (looksLikeUrl) return null;
+  if (value.contains('.') || value.contains('/')) return null;
+  return value;
+}
+
+Future<void> _landingOpenArticle(BuildContext context, String url) async {
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null) return;
+
+  final opened = await launchUrl(uri, webOnlyWindowName: '_blank');
+  if (!opened && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('기사 원문을 열 수 없습니다.')),
+    );
+  }
+}
+
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
 
@@ -39,36 +222,88 @@ class LandingScreen extends StatefulWidget {
   State<LandingScreen> createState() => _LandingScreenState();
 }
 
-class _LandingScreenState extends State<LandingScreen> {
+class _LandingScreenState extends State<LandingScreen>
+    with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ApiService _api = ApiService();
   final TextEditingController _searchController = TextEditingController();
   late Future<TrendInsightSnapshot> _insightFuture;
   late Future<List<IssueTimelineItem>> _timelineFuture;
   late Future<List<TrendItem>> _latestNewsFuture;
+  final List<_LandingMarketQuote> _marketQuotes = [];
+  Timer? _marketRefreshTimer;
+  bool _marketFetching = false;
+  bool _marketRefreshing = false;
+  String? _marketError;
+  DateTime? _marketLastUpdatedAt;
+
+  bool get isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get titleText => isDark ? Colors.white : const Color(0xFF0F172A);
+  Color get mutedText =>
+      isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+  Color get bodyText =>
+      isDark ? Colors.grey.shade300 : Colors.blueGrey.shade800;
+  Color get chipBg =>
+      isDark ? const Color(0xFF0F172A) : const Color(0xFFEEF4FF);
+  Color get chipBorder =>
+      isDark ? const Color(0xFF1F2937) : const Color(0xFFDCE7FF);
+  Color get inputFill =>
+      isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+  Color get inputBorder =>
+      isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+  Color get surface =>
+      isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC);
+  Color get surfaceBorder =>
+      isDark ? const Color(0xFF1F2937) : const Color(0xFFF0F4F8);
+  Color get cardBorder =>
+      isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5);
+  Color get ctaBg => isDark ? Colors.blue.shade600 : const Color(0xFF2563EB);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _insightFuture = _api.fetchTrendInsights();
-    _timelineFuture = _api.fetchTrendTimeline(period: '24h', limit: 3, minScore: 45);
-    _latestNewsFuture = _api.fetchTrends(limit: 12, sort: 'latest', period: '24h');
+    _timelineFuture =
+        _api.fetchTrendTimeline(period: '24h', limit: 3, minScore: 45);
+    _latestNewsFuture =
+        _api.fetchTrends(limit: 12, sort: 'latest', period: '24h');
+    _refreshMarketData(force: true);
+    _marketRefreshTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => _refreshMarketData(),
+    );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _marketRefreshTimer?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshMarketDataIfNeeded();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pageBackground = isDark ? const Color(0xFF0B1220) : Colors.white;
+    final pageGradientTop = isDark ? const Color(0xFF0B1220) : Colors.white;
+    final pageGradientMid =
+        isDark ? const Color(0xFF0F172A) : Colors.white.withOpacity(0.8);
+    final pageGradientBottom = isDark ? const Color(0xFF0B1220) : Colors.white;
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: Colors.white,
+      backgroundColor: pageBackground,
       drawer: isMobile ? _buildDrawer(context) : null,
       body: Stack(
         children: [
@@ -84,9 +319,9 @@ class _LandingScreenState extends State<LandingScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.white.withOpacity(0.1),
-                    Colors.white.withOpacity(0.8),
-                    Colors.white,
+                    pageGradientTop.withOpacity(isDark ? 0.12 : 0.1),
+                    pageGradientMid,
+                    pageGradientBottom,
                   ],
                   stops: const [0.0, 0.5, 1.0],
                 ),
@@ -102,16 +337,23 @@ class _LandingScreenState extends State<LandingScreen> {
                 ),
                 _FadeInOnScroll(
                   delay: 120,
-                  child: _buildIssueTimelineSection(),
+                  child: _buildBreakingNewsSection(isMobile),
                 ),
                 _FadeInOnScroll(
                   delay: 180,
-                  child: _buildLatestNewsSection(),
+                  child: _buildMarketOverviewSection(isMobile),
                 ),
-                const SizedBox(height: 40),
                 _FadeInOnScroll(
                   delay: 240,
-                  child: _buildMarketLinksSection(),
+                  child: _buildExchangeRateSection(isMobile),
+                ),
+                _FadeInOnScroll(
+                  delay: 300,
+                  child: _buildPopularStocksSection(isMobile),
+                ),
+                _FadeInOnScroll(
+                  delay: 360,
+                  child: _buildMarketDominanceSection(isMobile),
                 ),
                 const SizedBox(height: 70),
                 _FadeInOnScroll(
@@ -129,11 +371,11 @@ class _LandingScreenState extends State<LandingScreen> {
     return FutureBuilder<TrendInsightSnapshot>(
       future: _insightFuture,
       builder: (context, snapshot) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         final insight = snapshot.data;
         final analyzedCount = insight?.sentiment.count ?? 0;
-        final sectorMood = insight == null
-            ? '분석 대기'
-            : _landingSectorMoodLabel(insight);
+        final sectorMood =
+            insight == null ? '분석 대기' : _landingSectorMoodLabel(insight);
 
         return Container(
           padding: EdgeInsets.symmetric(
@@ -141,10 +383,17 @@ class _LandingScreenState extends State<LandingScreen> {
             vertical: 20,
           ),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.9),
+            color: isDark
+                ? const Color(0xFF111827).withOpacity(0.96)
+                : Colors.white.withOpacity(0.92),
+            border: Border(
+              bottom: BorderSide(
+                color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0),
+              ),
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withOpacity(isDark ? 0.20 : 0.03),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -171,12 +420,12 @@ class _LandingScreenState extends State<LandingScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Text(
+                  Text(
                     'Pulse',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+                      color: isDark ? Colors.white : Colors.black87,
                       letterSpacing: -0.5,
                     ),
                   ),
@@ -188,9 +437,11 @@ class _LandingScreenState extends State<LandingScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEF4FF),
+                    color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: const Color(0xFFDCE7FF)),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF1E3A8A) : const Color(0xFFDCE7FF),
+                    ),
                   ),
                   child: snapshot.connectionState == ConnectionState.waiting
                       ? Text(
@@ -198,7 +449,7 @@ class _LandingScreenState extends State<LandingScreen> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
-                            color: Colors.blue.shade700,
+                            color: isDark ? Colors.blue.shade100 : Colors.blue.shade700,
                             letterSpacing: 0,
                           ),
                         )
@@ -223,7 +474,7 @@ class _LandingScreenState extends State<LandingScreen> {
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w800,
-                                    color: Colors.blue.shade700,
+                                    color: isDark ? Colors.white : Colors.blue.shade700,
                                     letterSpacing: 0,
                                   ),
                                 ),
@@ -233,7 +484,7 @@ class _LandingScreenState extends State<LandingScreen> {
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.blueGrey.shade600,
+                                    color: isDark ? Colors.grey.shade100 : Colors.blueGrey.shade600,
                                     letterSpacing: 0,
                                   ),
                                 ),
@@ -257,10 +508,35 @@ class _LandingScreenState extends State<LandingScreen> {
                   '증시',
                   () => _openPage(const MarketPage()),
                 ),
+                const SizedBox(width: 12),
+                IconButton(
+                  tooltip: isDark ? '라이트 모드' : '다크 모드',
+                  onPressed: () => ThemeController.instance.toggleThemeMode(
+                    brightness: isDark ? Brightness.dark : Brightness.light,
+                  ),
+                  icon: Icon(
+                    isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                    color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                  ),
+                ),
               ],
               if (isMobile)
                 IconButton(
-                  icon: const Icon(Icons.menu, color: Colors.black87),
+                  tooltip: isDark ? '라이트 모드' : '다크 모드',
+                  onPressed: () => ThemeController.instance.toggleThemeMode(
+                    brightness: isDark ? Brightness.dark : Brightness.light,
+                  ),
+                  icon: Icon(
+                    isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                    color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                  ),
+                ),
+              if (isMobile)
+                IconButton(
+                  icon: Icon(
+                    Icons.menu,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
                   onPressed: () {
                     _scaffoldKey.currentState?.openDrawer();
                   },
@@ -279,6 +555,7 @@ class _LandingScreenState extends State<LandingScreen> {
   }
 
   Widget _navItem(String text, VoidCallback onTap) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return _HoverButton(
       onTap: onTap,
       child: Text(
@@ -286,16 +563,49 @@ class _LandingScreenState extends State<LandingScreen> {
         style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w500,
-          color: Colors.grey[700],
+          color: isDark ? Colors.grey.shade300 : Colors.grey[700],
         ),
       ),
     );
   }
 
+  Widget _themeChip(
+    BuildContext context,
+    String label,
+    bool selected,
+    VoidCallback onTap,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: selected
+            ? (isDark ? const Color(0xFF08111F) : Colors.white)
+            : (isDark ? Colors.grey.shade200 : Colors.blueGrey.shade700),
+      ),
+      selectedColor: isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
+      backgroundColor: isDark ? const Color(0xFF111827) : Colors.grey.shade100,
+      side: BorderSide(
+        color: selected
+            ? Colors.transparent
+            : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+
   Widget _buildDrawer(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final drawerBg = isDark ? const Color(0xFF0F172A) : Colors.white;
     return Drawer(
       child: Container(
-        color: Colors.white,
+        color: drawerBg,
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,7 +616,9 @@ class _LandingScreenState extends State<LandingScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Colors.blue.shade600, Colors.blue.shade400],
+                    colors: isDark
+                        ? [const Color(0xFF1D4ED8), const Color(0xFF0F172A)]
+                        : [Colors.blue.shade600, Colors.blue.shade400],
                   ),
                 ),
                 child: Row(
@@ -344,7 +656,10 @@ class _LandingScreenState extends State<LandingScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   children: [
                     ListTile(
-                      leading: const Icon(Icons.home, color: Colors.blue),
+                      leading: Icon(
+                        Icons.home,
+                        color: isDark ? Colors.blue.shade200 : Colors.blue,
+                      ),
                       title: const Text('Pulse'),
                       subtitle: const Text('메인 화면'),
                       onTap: () {
@@ -353,8 +668,10 @@ class _LandingScreenState extends State<LandingScreen> {
                     ),
                     const Divider(height: 1),
                     ListTile(
-                      leading: const Icon(Icons.newspaper_rounded,
-                          color: Colors.blue),
+                      leading: Icon(
+                        Icons.newspaper_rounded,
+                        color: isDark ? Colors.blue.shade200 : Colors.blue,
+                      ),
                       title: const Text('실시간뉴스'),
                       subtitle: const Text('최신 뉴스'),
                       onTap: () {
@@ -364,8 +681,10 @@ class _LandingScreenState extends State<LandingScreen> {
                     ),
                     const Divider(height: 1),
                     ListTile(
-                      leading: const Icon(Icons.psychology_rounded,
-                          color: Colors.blue),
+                      leading: Icon(
+                        Icons.psychology_rounded,
+                        color: isDark ? Colors.blue.shade200 : Colors.blue,
+                      ),
                       title: const Text('공포탐욕지수'),
                       subtitle: const Text('시장 심리'),
                       onTap: () {
@@ -375,8 +694,10 @@ class _LandingScreenState extends State<LandingScreen> {
                     ),
                     const Divider(height: 1),
                     ListTile(
-                      leading: const Icon(Icons.show_chart_rounded,
-                          color: Colors.blue),
+                      leading: Icon(
+                        Icons.show_chart_rounded,
+                        color: isDark ? Colors.blue.shade200 : Colors.blue,
+                      ),
                       title: const Text('증시'),
                       subtitle: const Text('주요 시장 데이터'),
                       onTap: () {
@@ -386,6 +707,49 @@ class _LandingScreenState extends State<LandingScreen> {
                     ),
                     const Divider(height: 1),
                   ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Text(
+                  '테마',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: ValueListenableBuilder<ThemeMode>(
+                  valueListenable: ThemeController.instance.mode,
+                  builder: (context, themeMode, _) {
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _themeChip(
+                            context,
+                            '시스템',
+                            themeMode == ThemeMode.system,
+                            () => ThemeController.instance
+                                .setThemeMode(ThemeMode.system)),
+                        _themeChip(
+                            context,
+                            '라이트',
+                            themeMode == ThemeMode.light,
+                            () => ThemeController.instance
+                                .setThemeMode(ThemeMode.light)),
+                        _themeChip(
+                            context,
+                            '다크',
+                            themeMode == ThemeMode.dark,
+                            () => ThemeController.instance
+                                .setThemeMode(ThemeMode.dark)),
+                      ],
+                    );
+                  },
                 ),
               ),
               Container(
@@ -415,12 +779,13 @@ class _LandingScreenState extends State<LandingScreen> {
     return FutureBuilder<TrendInsightSnapshot>(
       future: _insightFuture,
       builder: (context, snapshot) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         final isLoading = snapshot.connectionState == ConnectionState.waiting;
         final insight = snapshot.data;
 
         return Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1020),
+            constraints: const BoxConstraints(maxWidth: 1180),
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 isMobile ? 20 : 20,
@@ -430,12 +795,16 @@ class _LandingScreenState extends State<LandingScreen> {
               ),
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFAFBFC),
+                  color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFF0F4F8)),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF0F4F8),
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF0F172A).withOpacity(0.05),
+                      color: isDark
+                          ? Colors.black.withOpacity(0.24)
+                          : const Color(0xFF0F172A).withOpacity(0.05),
                       blurRadius: 24,
                       offset: const Offset(0, 8),
                     ),
@@ -452,34 +821,40 @@ class _LandingScreenState extends State<LandingScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
                                   children: [
                                     Container(
                                       padding: const EdgeInsets.all(7),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFEEF4FF),
+                                        color: isDark
+                                            ? const Color(0xFF172554)
+                                            : const Color(0xFFEEF4FF),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Icon(
                                         Icons.auto_awesome_rounded,
                                         size: 17,
-                                        color: Colors.blue.shade700,
+                                        color: isDark
+                                            ? Colors.blue.shade200
+                                            : Colors.blue.shade700,
                                       ),
                                     ),
                                     const SizedBox(width: 10),
-                                    const Expanded(
+                                    Expanded(
                                       child: Text(
                                         'AI 브리핑',
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w800,
-                                          color: Color(0xFF0F172A),
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF0F172A),
                                         ),
                                       ),
                                     ),
@@ -496,16 +871,22 @@ class _LandingScreenState extends State<LandingScreen> {
                                 vertical: 6,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
+                                color: isDark
+                                    ? const Color(0xFF111827)
+                                    : const Color(0xFFF8FAFC),
                                 borderRadius: BorderRadius.circular(999),
                                 border: Border.all(
-                                  color: const Color(0xFFE2E8F0),
+                                  color: isDark
+                                      ? const Color(0xFF1F2937)
+                                      : const Color(0xFFE2E8F0),
                                 ),
                               ),
                               child: Text(
                                 _landingTimeLabel(),
                                 style: TextStyle(
-                                  color: Colors.blueGrey.shade600,
+                                  color: isDark
+                                      ? Colors.grey.shade400
+                                      : Colors.blueGrey.shade600,
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -534,15 +915,959 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  void _refreshInsights() {
+  Future<void> _refreshInsights() async {
+    if (!mounted) return;
     setState(() {
       _insightFuture = _api.fetchTrendInsights();
-      _timelineFuture = _api.fetchTrendTimeline(period: '24h', limit: 3, minScore: 45);
-      _latestNewsFuture = _api.fetchTrends(limit: 12, sort: 'latest', period: '24h');
+      _timelineFuture =
+          _api.fetchTrendTimeline(period: '24h', limit: 3, minScore: 45);
+      _latestNewsFuture =
+          _api.fetchTrends(limit: 12, sort: 'latest', period: '24h');
     });
+    await _refreshMarketData(force: true);
+  }
+
+  bool _shouldRefreshMarketData() {
+    if (_marketLastUpdatedAt == null) return true;
+    return DateTime.now().difference(_marketLastUpdatedAt!) >=
+        const Duration(minutes: 5);
+  }
+
+  Future<void> _refreshMarketDataIfNeeded() async {
+    if (!_shouldRefreshMarketData()) return;
+    await _refreshMarketData();
+  }
+
+  Future<void> _refreshMarketData({bool force = false}) async {
+    if (_marketFetching) return;
+    if (!force && !_shouldRefreshMarketData()) return;
+
+    _marketFetching = true;
+    if (mounted) {
+      setState(() {
+        if (_marketQuotes.isNotEmpty) {
+          _marketRefreshing = true;
+        } else {
+          _marketRefreshing = true;
+          _marketError = null;
+        }
+      });
+    }
+
+    try {
+      final quotes = await _fetchLandingMarketQuotes();
+      if (!mounted) return;
+      setState(() {
+        _marketQuotes
+          ..clear()
+          ..addAll(quotes);
+        _marketError = null;
+        _marketLastUpdatedAt = DateTime.now();
+        _marketRefreshing = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _marketError = '업데이트 실패';
+        _marketRefreshing = false;
+      });
+    } finally {
+      _marketFetching = false;
+    }
+  }
+
+  Widget _buildBreakingNewsSection(bool isMobile) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final maxItems = isMobile ? 6 : 7;
+    return FutureBuilder<List<TrendItem>>(
+      future: _latestNewsFuture,
+      builder: (context, snapshot) {
+        final loading = snapshot.connectionState == ConnectionState.waiting;
+        final rawItems = (snapshot.data ?? const <TrendItem>[]).toList()
+          ..sort((a, b) {
+            final aDate =
+                _landingTrendDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final bDate =
+                _landingTrendDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+            return bDate.compareTo(aDate);
+          });
+        final items = rawItems.take(maxItems).toList();
+
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1180),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withOpacity(0.24)
+                          : const Color(0xFF0F172A).withOpacity(0.04),
+                      blurRadius: 22,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.bolt_rounded,
+                            size: 17,
+                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '실시간 속보',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _openPage(const HomeScreen()),
+                          style: TextButton.styleFrom(
+                            foregroundColor: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            minimumSize: Size.zero,
+                          ),
+                          child: const Text(
+                            '더 보기 →',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '시간순으로 들어온 최신 뉴스를 바로 확인합니다.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    if (loading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 28),
+                        child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    else if (items.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Text(
+                          '아직 불러온 속보가 없습니다.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.grey.shade300 : Colors.grey.shade600,
+                          ),
+                        ),
+                      )
+                    else
+                      Column(
+                        children: [
+                          for (int i = 0; i < items.length; i++) ...[
+                            _BreakingNewsTimelineTile(
+                              item: items[i],
+                              isFeatured: i == 0,
+                              onTap: items[i].link.trim().isNotEmpty
+                                  ? () => _landingOpenArticle(context, items[i].link)
+                                  : null,
+                            ),
+                            if (i != items.length - 1)
+                              Divider(
+                                height: 18,
+                                thickness: 0.5,
+                                color: isDark
+                                    ? Colors.grey.shade800
+                                    : const Color(0xFFE8EEF5),
+                              ),
+                          ],
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMarketOverviewSection(bool isMobile) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final targets = [
+      _landingQuoteByTitle(_marketQuotes, '코스피'),
+      _landingQuoteByTitle(_marketQuotes, '코스닥'),
+      _landingQuoteByTitle(_marketQuotes, '나스닥100 선물'),
+      _landingQuoteByTitle(_marketQuotes, '비트코인'),
+    ].whereType<_LandingMarketQuote>().toList();
+    final updatedAt = _landingLatestUpdatedAt(targets) ?? _marketLastUpdatedAt;
+    final updatedLabel = updatedAt == null
+        ? '시세 확인 중'
+        : '최근 업데이트 ${_landingFormatUpdatedAt(updatedAt)}';
+    final loading = _marketRefreshing && _marketQuotes.isEmpty;
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Icon(
+                        Icons.show_chart_rounded,
+                        size: 16,
+                        color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '지금 시장',
+                            style: TextStyle(
+                              fontSize: 13.8,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            updatedLabel,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_marketRefreshing && _marketQuotes.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.6,
+                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade600,
+                          ),
+                        ),
+                      ),
+                    TextButton(
+                      onPressed: () => _openPage(const MarketPage()),
+                      style: TextButton.styleFrom(
+                        foregroundColor: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        minimumSize: Size.zero,
+                      ),
+                      child: const Text(
+                        '전체 차트 →',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                else if (targets.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      _marketError ?? '시장 데이터를 불러오지 못했습니다.',
+                      style: TextStyle(
+                        color: isDark ? Colors.grey.shade300 : Colors.grey.shade600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  )
+                else
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: isMobile ? 2 : 4,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                    childAspectRatio: isMobile ? 1.45 : 1.95,
+                    children: targets
+                        .map((quote) => _LandingMarketSummaryCard(quote: quote))
+                        .toList(),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExchangeRateSection(bool isMobile) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final targets = [
+      _landingQuoteByTitle(_marketQuotes, 'USD/KRW'),
+      _landingQuoteByTitle(_marketQuotes, 'EUR/USD'),
+      _landingQuoteByTitle(_marketQuotes, 'USD/JPY'),
+    ].whereType<_LandingMarketQuote>().toList();
+    final updatedAt = _landingLatestUpdatedAt(targets) ?? _marketLastUpdatedAt;
+    final updatedLabel = updatedAt == null
+        ? '시세 확인 중'
+        : '시세 기준 ${_landingFormatUpdatedAt(updatedAt)}';
+    final loading = _marketRefreshing && _marketQuotes.isEmpty;
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Icon(
+                        Icons.currency_exchange_rounded,
+                        size: 16,
+                        color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '환율',
+                            style: TextStyle(
+                              fontSize: 13.8,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            updatedLabel,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_marketRefreshing && _marketQuotes.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.6,
+                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade600,
+                          ),
+                        ),
+                      ),
+                    TextButton(
+                      onPressed: () => _openPage(const MarketPage()),
+                      style: TextButton.styleFrom(
+                        foregroundColor: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        minimumSize: Size.zero,
+                      ),
+                      child: const Text(
+                        '매크로 →',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                else if (targets.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      _marketError ?? '환율 데이터를 불러오지 못했습니다.',
+                      style: TextStyle(
+                        color: isDark ? Colors.grey.shade300 : Colors.grey.shade600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  )
+                else
+                  Column(
+                    children: [
+                      for (int i = 0; i < targets.length; i++) ...[
+                        _LandingExchangeRateRow(quote: targets[i]),
+                        if (i != targets.length - 1)
+                          Divider(
+                            height: 10,
+                            thickness: 0.5,
+                            color: isDark ? Colors.grey.shade800 : const Color(0xFFE8EEF5),
+                          ),
+                      ],
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPopularStocksSection(bool isMobile) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final equities = _marketQuotes.where((item) => item.group == 'equity').toList()
+      ..sort((a, b) => b.percentChange.abs().compareTo(a.percentChange.abs()));
+    final items = equities.take(5).toList();
+    final updatedAt = _landingLatestUpdatedAt(items) ?? _marketLastUpdatedAt;
+    final updatedLabel = updatedAt == null
+        ? '시세 확인 중'
+        : '최근 업데이트 ${_landingFormatUpdatedAt(updatedAt)}';
+    final loading = _marketRefreshing && _marketQuotes.isEmpty;
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Icon(
+                        Icons.trending_up_rounded,
+                        size: 16,
+                        color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '24시간 인기 종목',
+                            style: TextStyle(
+                              fontSize: 13.8,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            updatedLabel,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_marketRefreshing && _marketQuotes.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.6,
+                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade600,
+                          ),
+                        ),
+                      ),
+                    TextButton(
+                      onPressed: () => _openPage(const MarketPage()),
+                      style: TextButton.styleFrom(
+                        foregroundColor: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        minimumSize: Size.zero,
+                      ),
+                      child: const Text(
+                        '전체 차트 →',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                else if (items.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      _marketError ?? '종목 데이터를 불러오지 못했습니다.',
+                      style: TextStyle(
+                        color: isDark ? Colors.grey.shade300 : Colors.grey.shade600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  )
+                else
+                  Column(
+                    children: [
+                      for (int i = 0; i < items.length; i++) ...[
+                        _LandingMarketRankRow(
+                          rank: i + 1,
+                          quote: items[i],
+                        ),
+                        if (i != items.length - 1)
+                          Divider(
+                            height: 10,
+                            thickness: 0.5,
+                            color: isDark ? Colors.grey.shade800 : const Color(0xFFE8EEF5),
+                          ),
+                      ],
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMarketDominanceSection(bool isMobile) {
+    return FutureBuilder<TrendInsightSnapshot>(
+      future: _insightFuture,
+      builder: (context, snapshot) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final insight = snapshot.data;
+        final sectors = _landingSectorDominanceRows(insight).take(isMobile ? 4 : 5).toList();
+
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1180),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.donut_large_rounded,
+                            size: 17,
+                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '시장 도미넌스',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '뉴스 기준으로 많이 언급되는 섹터를 요약합니다.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (insight == null || sectors.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text(
+                          '섹터 도미넌스 데이터를 준비 중입니다.',
+                          style: TextStyle(
+                            color: isDark ? Colors.grey.shade300 : Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      )
+                    else
+                      Column(
+                        children: sectors.map((sector) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _LandingDominanceRow(
+                              label: sector.label,
+                              valueText: sector.valueText,
+                              changeText: sector.changeText,
+                              ratio: sector.ratio,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<List<_LandingMarketQuote>> _fetchLandingMarketQuotes() async {
+    const configs = <_LandingMarketConfig>[
+      _LandingMarketConfig(
+        symbol: '^KS11',
+        tvSymbol: 'KRX:KOSPI',
+        title: '코스피',
+        prefix: '',
+        group: 'index',
+      ),
+      _LandingMarketConfig(
+        symbol: '^KQ11',
+        tvSymbol: 'KRX:KOSDAQ',
+        title: '코스닥',
+        prefix: '',
+        group: 'index',
+      ),
+      _LandingMarketConfig(
+        symbol: 'NQ=F',
+        tvSymbol: 'CME_MINI:NQ1!',
+        title: '나스닥100 선물',
+        prefix: '',
+        group: 'index',
+      ),
+      _LandingMarketConfig(
+        symbol: 'BTC-USD',
+        tvSymbol: 'COINBASE:BTCUSD',
+        title: '비트코인',
+        prefix: '\$',
+        group: 'crypto',
+      ),
+      _LandingMarketConfig(
+        symbol: 'KRW=X',
+        tvSymbol: 'FX_IDC:USDKRW',
+        title: 'USD/KRW',
+        prefix: '',
+        group: 'fx',
+      ),
+      _LandingMarketConfig(
+        symbol: 'EURUSD=X',
+        tvSymbol: 'FX:EURUSD',
+        title: 'EUR/USD',
+        prefix: '',
+        group: 'fx',
+      ),
+      _LandingMarketConfig(
+        symbol: 'JPY=X',
+        tvSymbol: 'FX:USDJPY',
+        title: 'USD/JPY',
+        prefix: '',
+        group: 'fx',
+      ),
+      _LandingMarketConfig(
+        symbol: '005930.KS',
+        tvSymbol: 'KRX:005930',
+        title: '삼성전자',
+        prefix: '',
+        group: 'equity',
+      ),
+      _LandingMarketConfig(
+        symbol: '000660.KS',
+        tvSymbol: 'KRX:000660',
+        title: 'SK하이닉스',
+        prefix: '',
+        group: 'equity',
+      ),
+      _LandingMarketConfig(
+        symbol: '035720.KS',
+        tvSymbol: 'KRX:035720',
+        title: '카카오',
+        prefix: '',
+        group: 'equity',
+      ),
+      _LandingMarketConfig(
+        symbol: '035420.KS',
+        tvSymbol: 'KRX:035420',
+        title: 'NAVER',
+        prefix: '',
+        group: 'equity',
+      ),
+      _LandingMarketConfig(
+        symbol: '373220.KS',
+        tvSymbol: 'KRX:373220',
+        title: 'LG에너지솔루션',
+        prefix: '',
+        group: 'equity',
+      ),
+      _LandingMarketConfig(
+        symbol: '207940.KS',
+        tvSymbol: 'KRX:207940',
+        title: '삼성바이오로직스',
+        prefix: '',
+        group: 'equity',
+      ),
+    ];
+
+    final symbolsQuery = configs.map((item) => item.symbol).join(',');
+    final uri = Uri.parse(
+      'https://news-summarizer.bum2432.workers.dev/api/market-data?symbols=$symbolsQuery&interval=5m&range=1d',
+    );
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Market data request failed: ${response.statusCode}');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    if (decoded['success'] != true) {
+      throw Exception('Market data response was not successful');
+    }
+
+    final results = (decoded['data'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    final bySymbol = {
+      for (final item in results) item['symbol']?.toString() ?? '': item,
+    };
+
+    final quotes = <_LandingMarketQuote>[];
+    for (final config in configs) {
+      final raw = bySymbol[config.symbol];
+      if (raw == null || raw['error'] != null) continue;
+      final currentPrice = (raw['currentPrice'] as num?)?.toDouble();
+      final percentChange = (raw['percentChange'] as num?)?.toDouble();
+      if (currentPrice == null || percentChange == null) continue;
+      final priceUpdatedAt = _landingParseTimestamp(
+        raw['priceUpdatedAt']?.toString() ?? '',
+      );
+
+      quotes.add(
+        _LandingMarketQuote(
+          symbol: config.symbol,
+          tvSymbol: config.tvSymbol,
+          title: config.title,
+          prefix: config.prefix,
+          group: config.group,
+          currentPrice: currentPrice,
+          percentChange: percentChange,
+          priceUpdatedAt: priceUpdatedAt,
+        ),
+      );
+    }
+
+    return quotes;
+  }
+
+  _LandingMarketQuote? _landingQuoteByTitle(
+    List<_LandingMarketQuote> quotes,
+    String title,
+  ) {
+    for (final quote in quotes) {
+      if (quote.title == title) return quote;
+    }
+    return null;
+  }
+
+  List<_LandingSectorDominanceRowData> _landingSectorDominanceRows(
+    TrendInsightSnapshot? insight,
+  ) {
+    if (insight == null) return const [];
+
+    final rows = <_LandingSectorDominanceRowData>[
+      _LandingSectorDominanceRowData(
+        '반도체',
+        ['반도체', 'HBM', 'D램', '낸드', '파운드리', '팹리스', '메모리', '칩', '삼성전자', 'SK하이닉스', '엔비디아'],
+      ),
+      _LandingSectorDominanceRowData(
+        '2차전지',
+        ['2차전지', '배터리', '전기차', '리튬', '양극재', '음극재', '전해질', '셀'],
+      ),
+      _LandingSectorDominanceRowData(
+        '바이오/제약',
+        ['바이오', '제약', '신약', '임상', '헬스케어', 'FDA', '의약'],
+      ),
+      _LandingSectorDominanceRowData(
+        '방산',
+        ['방산', 'K방산', '무기', '군수', '전차', '미사일', '드론'],
+      ),
+      _LandingSectorDominanceRowData(
+        '시장 거래대금',
+        ['거래대금', '증시', '코스피', '코스닥', '환율', '금리', '채권', '달러', '연준', 'FOMC'],
+      ),
+    ];
+
+    final scores = rows.map((row) {
+      double total = 0;
+
+      for (final keyword in insight.keywords) {
+        if (row.matchesText(keyword.keyword) ||
+            row.matchesText(keyword.representativeTitle) ||
+            row.matchesText(keyword.category)) {
+          total += keyword.newsCount * 1.4;
+          total += (keyword.sentimentTemperature ?? 50) >= 70
+              ? 0.5
+              : (keyword.sentimentTemperature ?? 50) <= 30
+                  ? 0.25
+                  : 0.1;
+        }
+      }
+
+      for (final issue in insight.risingIssues) {
+        if (row.matchesText(issue.keyword) ||
+            row.matchesText(issue.representativeTitle) ||
+            row.matchesText(issue.category)) {
+          total += issue.currentCount * 1.15;
+          total += issue.growthRate > 0 ? (issue.growthRate.clamp(0, 200) / 80) : 0;
+          total += issue.isNew ? 0.4 : 0.1;
+        }
+      }
+
+      if (row.label == '시장 거래대금') {
+        final marketBias = insight.keywords.where((item) {
+          final text = '${item.keyword} ${item.representativeTitle} ${item.category}'.toLowerCase();
+          return text.contains('코스피') ||
+              text.contains('코스닥') ||
+              text.contains('증시') ||
+              text.contains('금리') ||
+              text.contains('환율') ||
+              text.contains('달러') ||
+              text.contains('채권');
+        }).fold<double>(0, (sum, item) => sum + item.newsCount * 0.9);
+        total += marketBias;
+      }
+
+      return MapEntry(row, total);
+    }).toList();
+
+    final totalScore = scores.fold<double>(0, (sum, entry) => sum + entry.value);
+    if (totalScore <= 0) return const [];
+
+    final output = scores.map((entry) {
+      final ratio = entry.value / totalScore;
+      return _LandingSectorDominanceRowData(
+        entry.key.label,
+        entry.key.keywords,
+        ratio: ratio,
+        valueText: '${(ratio * 100).round()}%',
+        changeText: ratio >= 0.25 ? '상위' : '관심',
+      );
+    }).toList()
+      ..sort((a, b) => b.ratio.compareTo(a.ratio));
+
+    return output;
   }
 
   Widget _buildIssueTimelineSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return FutureBuilder<List<IssueTimelineItem>>(
       future: _timelineFuture,
       builder: (context, snapshot) {
@@ -557,12 +1882,16 @@ class _LandingScreenState extends State<LandingScreen> {
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFAFBFC),
+                  color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFE8EEF5)),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5),
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF0F172A).withOpacity(0.04),
+                      color: isDark
+                          ? Colors.black.withOpacity(0.24)
+                          : const Color(0xFF0F172A).withOpacity(0.04),
                       blurRadius: 22,
                       offset: const Offset(0, 8),
                     ),
@@ -576,23 +1905,29 @@ class _LandingScreenState extends State<LandingScreen> {
                         Container(
                           padding: const EdgeInsets.all(7),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEEF4FF),
+                            color: isDark
+                                ? const Color(0xFF172554)
+                                : const Color(0xFFEEF4FF),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Icon(
                             Icons.timeline_rounded,
                             size: 17,
-                            color: Colors.blue.shade700,
+                            color: isDark
+                                ? Colors.blue.shade200
+                                : Colors.blue.shade700,
                           ),
                         ),
                         const SizedBox(width: 10),
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             '실시간 이슈 타임라인',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF0F172A),
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A),
                             ),
                           ),
                         ),
@@ -601,7 +1936,9 @@ class _LandingScreenState extends State<LandingScreen> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Colors.blueGrey.shade500,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.blueGrey.shade500,
                           ),
                         ),
                       ],
@@ -611,7 +1948,9 @@ class _LandingScreenState extends State<LandingScreen> {
                       '시간순으로 묶인 핵심 이슈만 보여줍니다.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.blueGrey.shade500,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.blueGrey.shade500,
                         height: 1.35,
                       ),
                     ),
@@ -619,7 +1958,8 @@ class _LandingScreenState extends State<LandingScreen> {
                     if (loading)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 28),
-                        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                        child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     else if (items.isEmpty)
                       Padding(
@@ -628,7 +1968,9 @@ class _LandingScreenState extends State<LandingScreen> {
                           '아직 타임라인으로 묶을 만큼 충분한 이슈가 없습니다.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey.shade600,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
                           ),
                         ),
                       )
@@ -671,7 +2013,8 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  Future<List<TrendItem>> _resolveTimelineRelatedNews(IssueTimelineItem item) async {
+  Future<List<TrendItem>> _resolveTimelineRelatedNews(
+      IssueTimelineItem item) async {
     try {
       return await _api.fetchIssueTimelineNews(
         issueId: item.id,
@@ -683,7 +2026,8 @@ class _LandingScreenState extends State<LandingScreen> {
     return const <TrendItem>[];
   }
 
-  Future<List<TrendItem>> _resolveClusterRelatedNews(NewsCluster cluster) async {
+  Future<List<TrendItem>> _resolveClusterRelatedNews(
+      NewsCluster cluster) async {
     final merged = <String, TrendItem>{};
     for (final item in cluster.items) {
       final key = item.id > 0
@@ -708,15 +2052,29 @@ class _LandingScreenState extends State<LandingScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
+        final isDark = ThemeController.instance.mode.value == ThemeMode.dark;
+        final surface = isDark ? const Color(0xFF111827) : Colors.white;
+        final border =
+            isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+        final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
+        final secondaryText =
+            isDark ? Colors.grey.shade200 : Colors.blueGrey.shade500;
+
         return DraggableScrollableSheet(
           initialChildSize: 0.82,
           minChildSize: 0.45,
           maxChildSize: 0.95,
           builder: (context, scrollController) {
             return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28)),
+                border: Border(
+                  top: BorderSide(color: border),
+                  left: BorderSide(color: border),
+                  right: BorderSide(color: border),
+                ),
               ),
               child: FutureBuilder<List<TrendItem>>(
                 future: future,
@@ -731,9 +2089,13 @@ class _LandingScreenState extends State<LandingScreen> {
                       return bDate.compareTo(aDate);
                     });
 
-                  return CustomScrollView(
-                    controller: scrollController,
-                    slivers: [
+                  return DefaultTextStyle.merge(
+                    style: TextStyle(
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                    child: CustomScrollView(
+                      controller: scrollController,
+                      slivers: [
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
@@ -744,24 +2106,29 @@ class _LandingScreenState extends State<LandingScreen> {
                                 height: 4,
                                 margin: const EdgeInsets.only(right: 12),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade300,
+                                  color: isDark
+                                      ? Colors.grey.shade700
+                                      : Colors.grey.shade300,
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                               ),
                               Expanded(
                                 child: Text(
                                   title,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w900,
-                                    color: Colors.black87,
+                                    color: isDark ? Colors.white : primaryText,
                                   ),
                                 ),
                               ),
                               IconButton(
                                 tooltip: '닫기',
                                 onPressed: () => Navigator.of(context).pop(),
-                                icon: const Icon(Icons.close_rounded),
+                                icon: Icon(
+                                  Icons.close_rounded,
+                                  color: secondaryText,
+                                ),
                               ),
                             ],
                           ),
@@ -770,7 +2137,7 @@ class _LandingScreenState extends State<LandingScreen> {
                       if (snapshot.connectionState == ConnectionState.waiting)
                         const SliverFillRemaining(
                           hasScrollBody: false,
-                          child: Center(child: CircularProgressIndicator()),
+                          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
                         )
                       else if (snapshot.hasError)
                         SliverFillRemaining(
@@ -782,7 +2149,7 @@ class _LandingScreenState extends State<LandingScreen> {
                           ),
                         )
                       else if (orderedItems.isEmpty)
-                        const SliverFillRemaining(
+                        SliverFillRemaining(
                           hasScrollBody: false,
                           child: _LandingSearchStateMessage(
                             icon: Icons.search_off_rounded,
@@ -804,7 +2171,8 @@ class _LandingScreenState extends State<LandingScreen> {
                             },
                           ),
                         ),
-                    ],
+                      ],
+                    ),
                   );
                 },
               ),
@@ -816,15 +2184,17 @@ class _LandingScreenState extends State<LandingScreen> {
   }
 
   Widget _buildLatestNewsSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return FutureBuilder<List<TrendItem>>(
       future: _latestNewsFuture,
       builder: (context, snapshot) {
         final loading = snapshot.connectionState == ConnectionState.waiting;
-        final rawItems = (snapshot.data ?? const <TrendItem>[])
-            .toList()
+        final rawItems = (snapshot.data ?? const <TrendItem>[]).toList()
           ..sort((a, b) {
-            final aDate = _landingTrendDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-            final bDate = _landingTrendDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final aDate =
+                _landingTrendDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final bDate =
+                _landingTrendDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
             return bDate.compareTo(aDate);
           });
         final clusters = groupSimilarNews(rawItems, maxClusters: 6);
@@ -837,12 +2207,16 @@ class _LandingScreenState extends State<LandingScreen> {
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFAFBFC),
+                  color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFE8EEF5)),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5),
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF0F172A).withOpacity(0.05),
+                      color: isDark
+                          ? Colors.black.withOpacity(0.24)
+                          : const Color(0xFF0F172A).withOpacity(0.05),
                       blurRadius: 24,
                       offset: const Offset(0, 8),
                     ),
@@ -851,12 +2225,12 @@ class _LandingScreenState extends State<LandingScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '최신 뉴스',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF0F172A),
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -864,7 +2238,9 @@ class _LandingScreenState extends State<LandingScreen> {
                       '지금 들어온 기사부터 바로 확인합니다.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.blueGrey.shade500,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.blueGrey.shade500,
                         height: 1.35,
                       ),
                     ),
@@ -879,7 +2255,10 @@ class _LandingScreenState extends State<LandingScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 20),
                         child: Text(
                           '아직 불러온 뉴스가 없습니다.',
-                          style: TextStyle(color: Colors.grey[600]),
+                          style: TextStyle(
+                              color: isDark
+                                  ? Colors.grey.shade400
+                                  : Colors.grey[600]),
                         ),
                       )
                     else
@@ -905,38 +2284,6 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  Widget _buildMarketLinksSection() {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1180),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Row(
-            children: [
-              Expanded(
-                child: _smallNavCard(
-                  icon: Icons.psychology_rounded,
-                  title: '공포탐욕지수',
-                  subtitle: '비트코인 / 증시 심리',
-                  onTap: () => _openPage(const FearGreedPage()),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _smallNavCard(
-                  icon: Icons.show_chart_rounded,
-                  title: '증시 정보',
-                  subtitle: '주요 지수와 차트',
-                  onTap: () => _openPage(const MarketPage()),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   DateTime? _landingTrendDate(TrendItem trend) {
     return _landingParseDate(trend.published) ??
         _landingParseDate(trend.createdAt);
@@ -957,15 +2304,21 @@ class _LandingScreenState extends State<LandingScreen> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border =
+        isDark ? const Color(0xFF1F2937) : Colors.grey.withOpacity(0.12);
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: surface,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.grey.withOpacity(0.12)),
+          border: Border.all(color: border),
         ),
         child: Row(
           children: [
@@ -973,10 +2326,13 @@ class _LandingScreenState extends State<LandingScreen> {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.08),
+                color: isDark
+                    ? const Color(0xFF172554)
+                    : Colors.blue.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: Colors.blue.shade700),
+              child: Icon(icon,
+                  color: isDark ? Colors.blue.shade200 : Colors.blue.shade700),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -985,15 +2341,15 @@ class _LandingScreenState extends State<LandingScreen> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
-                      color: Colors.black87,
+                      color: primaryText,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    style: TextStyle(fontSize: 12, color: secondaryText),
                   ),
                 ],
               ),
@@ -1052,23 +2408,41 @@ class _LandingScreenState extends State<LandingScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
+        final isDark = ThemeController.instance.mode.value == ThemeMode.dark;
+        final surface = isDark ? const Color(0xFF111827) : Colors.white;
+        final border =
+            isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+        final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
+        final secondaryText =
+            isDark ? Colors.grey.shade200 : Colors.blueGrey.shade500;
+
         return DraggableScrollableSheet(
           initialChildSize: 0.72,
           minChildSize: 0.45,
           maxChildSize: 0.92,
           builder: (context, scrollController) {
             return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28)),
+                border: Border(
+                  top: BorderSide(color: border),
+                  left: BorderSide(color: border),
+                  right: BorderSide(color: border),
+                ),
               ),
-                child: FutureBuilder<List<TrendItem>>(
-                  future: future,
-                  builder: (context, snapshot) {
-                    final items = snapshot.data ?? const <TrendItem>[];
-                    final clusters = groupSimilarNews(items, maxClusters: 20);
+              child: FutureBuilder<List<TrendItem>>(
+                future: future,
+                builder: (context, snapshot) {
+                  final items = snapshot.data ?? const <TrendItem>[];
+                  final clusters = groupSimilarNews(items, maxClusters: 20);
 
-                    return CustomScrollView(
+                  return DefaultTextStyle.merge(
+                    style: TextStyle(
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                    child: CustomScrollView(
                       controller: scrollController,
                       slivers: [
                       SliverToBoxAdapter(
@@ -1081,24 +2455,29 @@ class _LandingScreenState extends State<LandingScreen> {
                                 height: 4,
                                 margin: const EdgeInsets.only(right: 12),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade300,
+                                  color: isDark
+                                      ? Colors.grey.shade700
+                                      : Colors.grey.shade300,
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                               ),
                               Expanded(
                                 child: Text(
                                   title,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w900,
-                                    color: Colors.black87,
+                                    color: isDark ? Colors.white : primaryText,
                                   ),
                                 ),
                               ),
                               IconButton(
                                 tooltip: '닫기',
                                 onPressed: () => Navigator.of(context).pop(),
-                                icon: const Icon(Icons.close_rounded),
+                                icon: Icon(
+                                  Icons.close_rounded,
+                                  color: secondaryText,
+                                ),
                               ),
                             ],
                           ),
@@ -1148,7 +2527,8 @@ class _LandingScreenState extends State<LandingScreen> {
                             },
                           ),
                         ),
-                    ],
+                      ],
+                    ),
                   );
                 },
               ),
@@ -1160,6 +2540,9 @@ class _LandingScreenState extends State<LandingScreen> {
   }
 
   Widget _buildHeroSection(bool isMobile) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.grey.shade300 : Colors.grey[600];
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: isMobile ? 24 : 80,
@@ -1173,7 +2556,7 @@ class _LandingScreenState extends State<LandingScreen> {
             style: TextStyle(
               fontSize: isMobile ? 36 : 64,
               fontWeight: FontWeight.w800,
-              color: Colors.black87,
+              color: primaryText,
               height: 1.1,
               letterSpacing: -1.5,
             ),
@@ -1185,7 +2568,7 @@ class _LandingScreenState extends State<LandingScreen> {
             style: TextStyle(
               fontSize: isMobile ? 16 : 20,
               fontWeight: FontWeight.w400,
-              color: Colors.grey[600],
+              color: secondaryText,
               height: 1.6,
             ),
           ),
@@ -1293,16 +2676,25 @@ class _LandingScreenState extends State<LandingScreen> {
   }
 
   Widget _featureCard(IconData icon, String title, String description) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border =
+        isDark ? const Color(0xFF1F2937) : Colors.grey.withOpacity(0.1);
+    final iconBg = isDark ? const Color(0xFF0F172A) : Colors.grey[50];
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey[600];
     return _HoverCard(
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+          border: Border.all(color: border),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: isDark
+                    ? Colors.black.withOpacity(0.24)
+                    : Colors.black.withOpacity(0.04),
                 blurRadius: 30,
                 offset: const Offset(0, 10)),
           ],
@@ -1315,18 +2707,18 @@ class _LandingScreenState extends State<LandingScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: Colors.grey[50],
+                color: iconBg,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, size: 24, color: Colors.black87),
+              child: Icon(icon, size: 24, color: primaryText),
             ),
             const SizedBox(height: 12),
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: Colors.black87),
+                  color: primaryText),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -1334,8 +2726,7 @@ class _LandingScreenState extends State<LandingScreen> {
             const SizedBox(height: 6),
             Text(
               description,
-              style:
-                  TextStyle(fontSize: 12, color: Colors.grey[600], height: 1.4),
+              style: TextStyle(fontSize: 12, color: secondaryText, height: 1.4),
               textAlign: TextAlign.center,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
@@ -1347,22 +2738,25 @@ class _LandingScreenState extends State<LandingScreen> {
   }
 
   Widget _buildCategoriesSection(bool isMobile) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey[600];
     return Container(
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80),
       child: Column(
         children: [
-          const Text(
+          Text(
             '다양한 분야의 뉴스',
             style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
-                color: Colors.black87,
+                color: primaryText,
                 letterSpacing: -0.5),
           ),
           const SizedBox(height: 12),
           Text(
             '관심 있는 카테고리를 골라 필요한 뉴스만 빠르게 확인해보세요.',
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 16, color: secondaryText),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 48),
@@ -1432,16 +2826,24 @@ class _LandingScreenState extends State<LandingScreen> {
 
   Widget _categoryCard(
       IconData icon, String title, String description, Color color) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border =
+        isDark ? const Color(0xFF1F2937) : Colors.grey.withOpacity(0.1);
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey[600];
     return _HoverCard(
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+          border: Border.all(color: border),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: isDark
+                    ? Colors.black.withOpacity(0.24)
+                    : Colors.black.withOpacity(0.04),
                 blurRadius: 30,
                 offset: const Offset(0, 10)),
           ],
@@ -1461,10 +2863,10 @@ class _LandingScreenState extends State<LandingScreen> {
             const SizedBox(height: 12),
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: Colors.black87),
+                  color: primaryText),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1472,8 +2874,7 @@ class _LandingScreenState extends State<LandingScreen> {
             const SizedBox(height: 4),
             Text(
               description,
-              style:
-                  TextStyle(fontSize: 12, color: Colors.grey[600], height: 1.4),
+              style: TextStyle(fontSize: 12, color: secondaryText, height: 1.4),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -1485,9 +2886,13 @@ class _LandingScreenState extends State<LandingScreen> {
   }
 
   Widget _buildFooter() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final topBorder = isDark ? Colors.grey.shade800 : Colors.grey[200]!;
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey[500];
     return Container(
       decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: Colors.grey[200]!, width: 1))),
+          border: Border(top: BorderSide(color: topBorder, width: 1))),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1180),
@@ -1514,16 +2919,16 @@ class _LandingScreenState extends State<LandingScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Text('Pulse',
+                    Text('Pulse',
                         style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w600,
-                            color: Colors.black87)),
+                            color: primaryText)),
                   ],
                 ),
                 const SizedBox(height: 32),
                 Text('2026 Pulse. All rights reserved.',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[500])),
+                    style: TextStyle(fontSize: 14, color: secondaryText)),
               ],
             ),
           ),
@@ -1556,17 +2961,27 @@ class _LandingInsightPanel extends StatelessWidget {
       return const _LandingInsightSkeleton();
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final data = insight!;
     final score = _landingTrendScore(data);
     final delta = _landingTrendDelta(data);
     final briefing = _landingBriefing(data);
     final keywords = data.keywords.take(8).toList();
     final rising = data.risingIssues.take(3).toList();
+    final titleText = isDark ? Colors.white : const Color(0xFF0F172A);
+    final mutedText = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+    final bodyText = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade800;
+    final chipBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFEEF4FF);
+    final chipBorder = isDark ? const Color(0xFF1F2937) : const Color(0xFFDCE7FF);
+    final chipText = isDark ? Colors.blue.shade200 : Colors.blue.shade700;
+    final inputFill = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final inputBorder = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final ctaBg = isDark ? Colors.blue.shade600 : const Color(0xFF2563EB);
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF101827),
+        color: isDark ? const Color(0xFF111827) : const Color(0xFF101827),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
@@ -1584,19 +2999,19 @@ class _LandingInsightPanel extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEAF1FF),
+                  color: chipBg,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFDDE9FF)),
+                  border: Border.all(color: chipBorder),
                 ),
-                child: const Icon(Icons.auto_awesome_rounded,
-                    color: Color(0xFF2563EB), size: 18),
+                child: Icon(Icons.auto_awesome_rounded,
+                    color: chipText, size: 18),
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'AI Briefing',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: titleText,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
@@ -1605,8 +3020,7 @@ class _LandingInsightPanel extends StatelessWidget {
               IconButton(
                 tooltip: '새로고침',
                 onPressed: onRefresh,
-                icon: const Icon(Icons.refresh_rounded,
-                    color: Colors.white, size: 19),
+                icon: Icon(Icons.refresh_rounded, color: mutedText, size: 19),
               ),
             ],
           ),
@@ -1614,7 +3028,7 @@ class _LandingInsightPanel extends StatelessWidget {
           Text(
             briefing,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.92),
+              color: bodyText,
               fontSize: 15,
               height: 1.55,
               fontWeight: FontWeight.w700,
@@ -1653,7 +3067,7 @@ class _LandingInsightPanel extends StatelessWidget {
           Text(
             '전일 대비 ${delta >= 0 ? '+' : ''}$delta · 긍정 ${data.sentiment.positiveRatio}% · 중립 ${data.sentiment.neutralRatio}% · 부정 ${data.sentiment.negativeRatio}%',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.64),
+              color: mutedText,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -1662,39 +3076,40 @@ class _LandingInsightPanel extends StatelessWidget {
           TextField(
             controller: searchController,
             onSubmitted: (_) => onStart(),
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: titleText),
             decoration: InputDecoration(
               hintText: 'AI, 환율, 비트코인 검색',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
-              prefixIcon: Icon(Icons.search_rounded,
-                  color: Colors.white.withOpacity(0.7)),
+              hintStyle: TextStyle(color: mutedText),
+              prefixIcon: Icon(Icons.search_rounded, color: mutedText),
               suffixIcon: IconButton(
                 tooltip: '검색',
                 onPressed: onStart,
-                icon: const Icon(Icons.arrow_forward_rounded,
-                    color: Colors.white),
+                icon: Icon(Icons.arrow_forward_rounded, color: titleText),
               ),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.09),
+              fillColor: chipBg,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+                borderSide: BorderSide(color: chipBorder),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+                borderSide: BorderSide(color: chipBorder),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.32)),
+                borderSide: BorderSide(
+                    color: isDark
+                        ? Colors.blue.shade200
+                        : const Color(0xFF2563EB)),
               ),
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             '실시간 인기 키워드',
             style: TextStyle(
-              color: Colors.white,
+              color: titleText,
               fontSize: 14,
               fontWeight: FontWeight.w900,
             ),
@@ -1710,10 +3125,10 @@ class _LandingInsightPanel extends StatelessWidget {
                     '${i + 1}. ${keywords[i].keyword} · ${keywords[i].newsCount}',
                   ),
                   onPressed: () => onKeywordTap(keywords[i]),
-                  backgroundColor: Colors.white.withOpacity(0.11),
-                  side: BorderSide(color: Colors.white.withOpacity(0.12)),
-                  labelStyle: const TextStyle(
-                    color: Colors.white,
+                  backgroundColor: chipBg.withOpacity(isDark ? 0.9 : 1.0),
+                  side: BorderSide(color: chipBorder),
+                  labelStyle: TextStyle(
+                    color: chipText,
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
                   ),
@@ -1722,10 +3137,10 @@ class _LandingInsightPanel extends StatelessWidget {
           ),
           if (rising.isNotEmpty) ...[
             const SizedBox(height: 16),
-            const Text(
+            Text(
               '급상승 이슈',
               style: TextStyle(
-                color: Colors.white,
+                color: titleText,
                 fontSize: 14,
                 fontWeight: FontWeight.w900,
               ),
@@ -1742,8 +3157,8 @@ class _LandingInsightPanel extends StatelessWidget {
               icon: const Icon(Icons.bolt_rounded, size: 18),
               label: const Text('실시간 뉴스 분석 보기'),
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black87,
+                backgroundColor: ctaBg,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
@@ -1762,15 +3177,18 @@ class _LandingInsightSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = ThemeController.instance.mode.value == ThemeMode.dark;
     return Container(
       height: 420,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF111827) : Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: isDark
+                ? Colors.black.withOpacity(0.20)
+                : Colors.black.withOpacity(0.04),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -1779,27 +3197,28 @@ class _LandingInsightSkeleton extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _skeletonBar(width: 150, height: 24),
+          _skeletonBar(isDark: isDark, width: 150, height: 24),
           const SizedBox(height: 18),
-          _skeletonBar(width: double.infinity, height: 16),
+          _skeletonBar(isDark: isDark, width: double.infinity, height: 16),
           const SizedBox(height: 8),
-          _skeletonBar(width: 280, height: 16),
+          _skeletonBar(isDark: isDark, width: 280, height: 16),
           const SizedBox(height: 22),
           Row(
             children: [
-              Expanded(child: _skeletonBar(width: double.infinity, height: 96)),
+              Expanded(child: _skeletonBar(isDark: isDark, width: double.infinity, height: 96)),
               const SizedBox(width: 10),
-              Expanded(child: _skeletonBar(width: double.infinity, height: 96)),
+              Expanded(child: _skeletonBar(isDark: isDark, width: double.infinity, height: 96)),
             ],
           ),
           const SizedBox(height: 18),
-          _skeletonBar(width: double.infinity, height: 48),
+          _skeletonBar(isDark: isDark, width: double.infinity, height: 48),
           const SizedBox(height: 18),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (int i = 0; i < 6; i++) _skeletonBar(width: 86, height: 34),
+              for (int i = 0; i < 6; i++)
+                _skeletonBar(isDark: isDark, width: 86, height: 34),
             ],
           ),
         ],
@@ -1807,12 +3226,16 @@ class _LandingInsightSkeleton extends StatelessWidget {
     );
   }
 
-  static Widget _skeletonBar({required double width, required double height}) {
+  static Widget _skeletonBar({
+    required bool isDark,
+    required double width,
+    required double height,
+  }) {
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF1FF),
+        color: isDark ? const Color(0xFF1F2937) : const Color(0xFFEAF1FF),
         borderRadius: BorderRadius.circular(12),
       ),
     );
@@ -1844,6 +3267,7 @@ class _LandingTrendPanel extends StatelessWidget {
       return const _LandingInsightSkeleton();
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final data = insight!;
     final score = _landingTrendScore(data);
     final delta = _landingTrendDelta(data);
@@ -1860,15 +3284,31 @@ class _LandingTrendPanel extends StatelessWidget {
     final risingMap = {
       for (final item in data.risingIssues) item.keyword: item,
     };
+    final surface = isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC);
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFF0F4F8);
+    final titleText = Theme.of(context).colorScheme.onSurface;
+    final bodyText = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade800;
+    final mutedText = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+    final chipBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFEEF4FF);
+    final chipBorder =
+        isDark ? const Color(0xFF1F2937) : const Color(0xFFDCE7FF);
+    final chipText = isDark ? Colors.blue.shade200 : Colors.blue.shade700;
+    final inputFill =
+        isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final inputBorder =
+        isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final ctaBg = isDark ? Colors.blue.shade600 : const Color(0xFF2563EB);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFBFC),
+        color: surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFF0F4F8)),
+        border: Border.all(color: border),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.05),
+            color: isDark
+                ? Colors.black.withOpacity(0.22)
+                : const Color(0xFF0F172A).withOpacity(0.05),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -1878,7 +3318,8 @@ class _LandingTrendPanel extends StatelessWidget {
         builder: (context, constraints) {
           final isCompact = constraints.maxWidth < 900;
 
-          Widget sectionTitle(String title, String subtitle, {bool compact = false}) {
+          Widget sectionTitle(String title, String subtitle,
+              {bool compact = false}) {
             final hasSubtitle = subtitle.trim().isNotEmpty;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1886,7 +3327,7 @@ class _LandingTrendPanel extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    color: const Color(0xFF0F172A),
+                    color: titleText,
                     fontSize: compact ? 16 : 16,
                     fontWeight: FontWeight.w700,
                     height: 1.1,
@@ -1897,7 +3338,7 @@ class _LandingTrendPanel extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: Colors.blueGrey.shade500,
+                      color: mutedText,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                       height: 1.35,
@@ -1915,10 +3356,10 @@ class _LandingTrendPanel extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text(
+                    Text(
                       '트렌드 점수',
                       style: TextStyle(
-                        color: Color(0xFF0F172A),
+                        color: titleText,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1926,8 +3367,8 @@ class _LandingTrendPanel extends StatelessWidget {
                     const SizedBox(width: 10),
                     Text(
                       '$score',
-                      style: const TextStyle(
-                        color: Color(0xFF0F172A),
+                      style: TextStyle(
+                        color: titleText,
                         fontSize: 24,
                         fontWeight: FontWeight.w900,
                         height: 1,
@@ -1937,9 +3378,7 @@ class _LandingTrendPanel extends StatelessWidget {
                     Text(
                       delta >= 0 ? '+$delta' : '$delta',
                       style: TextStyle(
-                        color: delta >= 0
-                            ? const Color(0xFF2563EB)
-                            : Colors.blueGrey,
+                        color: delta >= 0 ? const Color(0xFF2563EB) : mutedText,
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                       ),
@@ -1957,7 +3396,9 @@ class _LandingTrendPanel extends StatelessWidget {
                       return LinearProgressIndicator(
                         value: value,
                         minHeight: 5,
-                        backgroundColor: const Color(0xFFE8EEF7),
+                        backgroundColor: isDark
+                            ? const Color(0xFF1F2937)
+                            : const Color(0xFFE8EEF7),
                         valueColor: const AlwaysStoppedAnimation<Color>(
                           Color(0xFF2563EB),
                         ),
@@ -1969,7 +3410,7 @@ class _LandingTrendPanel extends StatelessWidget {
                 Text(
                   '현재 흐름을 100점 기준으로 간단히 보여줍니다.',
                   style: TextStyle(
-                    color: Colors.blueGrey.shade500,
+                    color: mutedText,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     height: 1.3,
@@ -2026,7 +3467,7 @@ class _LandingTrendPanel extends StatelessWidget {
                           child: Text(
                             bullet,
                             style: TextStyle(
-                              color: Colors.blueGrey.shade800,
+                              color: bodyText,
                               fontSize: 14,
                               height: 1.42,
                               fontWeight: FontWeight.w500,
@@ -2041,7 +3482,7 @@ class _LandingTrendPanel extends StatelessWidget {
                 const SizedBox(height: 18),
                 keywordsBlock(),
                 const SizedBox(height: 16),
-                _buildSearchAndCta(searchController, onSearch),
+                _buildSearchAndCta(context, searchController, onSearch),
               ],
             );
           }
@@ -2075,7 +3516,7 @@ class _LandingTrendPanel extends StatelessWidget {
                                   child: Text(
                                     bullet,
                                     style: TextStyle(
-                                      color: Colors.blueGrey.shade800,
+                                      color: bodyText,
                                       fontSize: 14,
                                       height: 1.42,
                                       fontWeight: FontWeight.w500,
@@ -2098,7 +3539,7 @@ class _LandingTrendPanel extends StatelessWidget {
                       children: [
                         keywordsBlock(),
                         const SizedBox(height: 16),
-                        _buildSearchAndCta(searchController, onSearch),
+                        _buildSearchAndCta(context, searchController, onSearch),
                       ],
                     ),
                   ),
@@ -2112,9 +3553,15 @@ class _LandingTrendPanel extends StatelessWidget {
   }
 
   Widget _buildSearchAndCta(
+    BuildContext context,
     TextEditingController searchController,
     VoidCallback onSearch,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final mutedText = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+    final surface = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2124,25 +3571,27 @@ class _LandingTrendPanel extends StatelessWidget {
               child: TextField(
                 controller: searchController,
                 onSubmitted: (_) => onSearch(),
-                style: const TextStyle(color: Color(0xFF0F172A)),
+                style: TextStyle(color: textColor),
                 decoration: InputDecoration(
                   hintText: '뉴스 키워드 검색',
-                  hintStyle: TextStyle(color: Colors.blueGrey.shade500),
-                  prefixIcon: Icon(Icons.search_rounded,
-                      color: Colors.blueGrey.shade500),
+                  hintStyle: TextStyle(color: mutedText),
+                  prefixIcon: Icon(Icons.search_rounded, color: mutedText),
                   filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
+                  fillColor: surface,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    borderSide: BorderSide(color: border),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    borderSide: BorderSide(color: border),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xFF2563EB)),
+                    borderSide: BorderSide(
+                        color: isDark
+                            ? Colors.blue.shade200
+                            : const Color(0xFF2563EB)),
                   ),
                   isDense: true,
                   contentPadding:
@@ -2158,7 +3607,8 @@ class _LandingTrendPanel extends StatelessWidget {
                 icon: const Icon(Icons.bolt_rounded, size: 18),
                 label: const Text('실시간 뉴스 보기'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
+                  backgroundColor:
+                      isDark ? Colors.blue.shade600 : const Color(0xFF2563EB),
                   foregroundColor: Colors.white,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -2194,6 +3644,7 @@ class _LandingMetaStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = ThemeController.instance.mode.value == ThemeMode.dark;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: AnimatedContainer(
@@ -2202,9 +3653,9 @@ class _LandingMetaStat extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
+          color: isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE6ECF3)),
+          border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE6ECF3)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2212,18 +3663,18 @@ class _LandingMetaStat extends StatelessWidget {
             Row(
               children: [
                 if (leadingIcon != null) ...[
-                  Icon(
-                    leadingIcon,
-                    size: 13,
-                    color: leadingColor ?? Colors.blueGrey.shade500,
-                  ),
+                    Icon(
+                      leadingIcon,
+                      size: 13,
+                      color: leadingColor ?? (isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500),
+                    ),
                   const SizedBox(width: 4),
                 ],
                 Expanded(
                   child: Text(
                     label,
                     style: TextStyle(
-                      color: Colors.blueGrey.shade500,
+                      color: isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
@@ -2237,8 +3688,8 @@ class _LandingMetaStat extends StatelessWidget {
                 value,
                 style: TextStyle(
                   color: trailingBadge == null
-                      ? const Color(0xFF0F172A)
-                      : (leadingColor ?? const Color(0xFF0F172A)),
+                      ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                      : (leadingColor ?? (isDark ? Colors.white : const Color(0xFF0F172A))),
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
                   height: 1.15,
@@ -2251,7 +3702,7 @@ class _LandingMetaStat extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFECFDF3),
+                      color: isDark ? const Color(0xFF063B22) : const Color(0xFFECFDF3),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Row(
@@ -2268,8 +3719,8 @@ class _LandingMetaStat extends StatelessWidget {
                         const SizedBox(width: 4),
                         Text(
                           trailingBadge!,
-                          style: const TextStyle(
-                            color: Color(0xFF166534),
+                          style: TextStyle(
+                            color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF166534),
                             fontSize: 9.5,
                             fontWeight: FontWeight.w900,
                           ),
@@ -2282,7 +3733,7 @@ class _LandingMetaStat extends StatelessWidget {
                     child: Text(
                       value,
                       style: TextStyle(
-                        color: leadingColor ?? const Color(0xFF0F172A),
+                        color: leadingColor ?? (isDark ? Colors.white : const Color(0xFF0F172A)),
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                         height: 1.15,
@@ -2290,7 +3741,7 @@ class _LandingMetaStat extends StatelessWidget {
                     ),
                   ),
                 ],
-            ),
+              ),
           ],
         ),
       ),
@@ -2305,6 +3756,7 @@ class _LandingSentimentMiniBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = ThemeController.instance.mode.value == ThemeMode.dark;
     final total = sentiment.positiveRatio +
         sentiment.neutralRatio +
         sentiment.negativeRatio;
@@ -2316,9 +3768,9 @@ class _LandingSentimentMiniBar extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE6ECF3)),
+        border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE6ECF3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2337,7 +3789,7 @@ class _LandingSentimentMiniBar extends StatelessWidget {
               Text(
                 '감정 비율',
                 style: TextStyle(
-                  color: Colors.blueGrey.shade500,
+                  color: isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
@@ -2381,7 +3833,7 @@ class _LandingSentimentMiniBar extends StatelessWidget {
           Text(
             '긍정 ${sentiment.positiveRatio}% · 중립 ${sentiment.neutralRatio}% · 부정 ${sentiment.negativeRatio}%',
             style: TextStyle(
-              color: Colors.blueGrey.shade600,
+              color: isDark ? Colors.grey.shade400 : Colors.blueGrey.shade600,
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
@@ -2403,6 +3855,7 @@ class _LandingTimelineItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final stageLabel = _landingTimelineStageLabel(item.stage);
     final timeLabel = _landingTimelineTimeLabel(item.lastSeenAt);
     final growthLabel = item.growthRate >= 999
@@ -2422,9 +3875,9 @@ class _LandingTimelineItemTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isDark ? const Color(0xFF111827) : Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE6ECF3)),
+            border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE6ECF3)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2435,7 +3888,7 @@ class _LandingTimelineItemTile extends StatelessWidget {
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEEF4FF),
+                      color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                       borderRadius: BorderRadius.circular(9),
                     ),
                     child: Center(
@@ -2455,8 +3908,8 @@ class _LandingTimelineItemTile extends StatelessWidget {
                       item.title.isNotEmpty ? item.title : item.keyword,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF0F172A),
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
                         fontSize: 14.5,
                         height: 1.35,
                         fontWeight: FontWeight.w800,
@@ -2474,7 +3927,7 @@ class _LandingTimelineItemTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12.5,
-                  color: Colors.blueGrey.shade600,
+                  color: isDark ? Colors.grey.shade400 : Colors.blueGrey.shade600,
                   height: 1.45,
                 ),
               ),
@@ -2487,28 +3940,28 @@ class _LandingTimelineItemTile extends StatelessWidget {
                   _LandingTinyBadge(
                     text: item.category.isNotEmpty ? item.category : '이슈',
                     foreground: const Color(0xFF2563EB),
-                    background: const Color(0xFFEEF4FF),
+                    background: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                   ),
                   _LandingTinyBadge(
                     text: '기사 ${item.articleCount}건',
-                    foreground: const Color(0xFF334155),
-                    background: const Color(0xFFF1F5F9),
+                    foreground: isDark ? Colors.grey.shade100 : const Color(0xFF334155),
+                    background: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9),
                   ),
                   _LandingTinyBadge(
                     text: growthLabel,
-                    foreground: const Color(0xFFB45309),
-                    background: const Color(0xFFFFF7E6),
+                    foreground: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
+                    background: isDark ? const Color(0xFF3F2D12) : const Color(0xFFFFF7E6),
                   ),
                   _LandingTinyBadge(
                     text: stageLabel,
-                    foreground: const Color(0xFF475569),
-                    background: const Color(0xFFF8FAFC),
+                    foreground: isDark ? Colors.grey.shade100 : const Color(0xFF475569),
+                    background: isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
                   ),
                   Text(
                     timeLabel,
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.blueGrey.shade500,
+                      color: isDark ? Colors.grey.shade200 : Colors.blueGrey.shade500,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -2553,6 +4006,153 @@ class _LandingTinyBadge extends StatelessWidget {
   }
 }
 
+class _BreakingNewsTimelineTile extends StatelessWidget {
+  final TrendItem item;
+  final bool isFeatured;
+  final VoidCallback? onTap;
+
+  const _BreakingNewsTimelineTile({
+    required this.item,
+    this.isFeatured = false,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dateTime = _landingTryParseDate(
+      item.published.isNotEmpty ? item.published : item.createdAt,
+    );
+    final timeLabel = _landingClockLabel(dateTime);
+    final relativeLabel = _landingRelativeTimeLabel(dateTime);
+    final category = item.category.trim().isNotEmpty ? item.category.trim() : '속보';
+    final source = _landingSourceLabel(item.source);
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final bodyColor = isDark ? Colors.grey.shade200 : Colors.blueGrey.shade600;
+    final lineColor = isDark ? const Color(0xFF334155) : const Color(0xFFE5E7EB);
+    final dotColor = isDark ? Colors.blue.shade300 : Colors.blue.shade700;
+    final isLatest = isFeatured || (dateTime != null &&
+        DateTime.now().difference(dateTime).inMinutes <= 10);
+    final latestDotColor = isDark ? Colors.blue.shade200 : const Color(0xFF1D4ED8);
+
+    return MouseRegion(
+      cursor: onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        hoverColor: const Color(0xFF2563EB).withOpacity(0.03),
+        splashColor: const Color(0xFF2563EB).withOpacity(0.05),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: 18,
+                  child: Column(
+                    children: [
+                      Container(
+                        width: isLatest ? 12 : 10,
+                        height: isLatest ? 12 : 10,
+                        margin: const EdgeInsets.only(top: 5),
+                        decoration: BoxDecoration(
+                          color: isLatest ? latestDotColor : dotColor,
+                          shape: BoxShape.circle,
+                          boxShadow: isLatest
+                              ? [
+                                  BoxShadow(
+                                    color: latestDotColor.withOpacity(0.24),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Expanded(
+                        child: Container(
+                          width: 2,
+                          color: lineColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              timeLabel,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              relativeLabel,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
+                              ),
+                            ),
+                            const Spacer(),
+                            _LandingTinyBadge(
+                              text: category,
+                              foreground: isDark ? Colors.white : const Color(0xFF2563EB),
+                              background: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          item.koreanTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: titleColor,
+                            fontSize: 15,
+                            height: 1.35,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (source != null) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            source,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: bodyColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LandingSectionDivider extends StatelessWidget {
   const _LandingSectionDivider();
 
@@ -2579,6 +4179,7 @@ class _LandingKeywordChipV2 extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = risingIssue == null
         ? '관심도 ${keyword.newsCount}'
         : risingIssue?.isNew == true
@@ -2591,7 +4192,7 @@ class _LandingKeywordChipV2 extends StatelessWidget {
     return _HoverButton(
       onTap: onTap,
       child: Material(
-        color: const Color(0xFFF3F4F6),
+        color: isDark ? const Color(0xFF111827) : const Color(0xFFF3F4F6),
         borderRadius: BorderRadius.circular(999),
         child: InkWell(
           borderRadius: BorderRadius.circular(999),
@@ -2605,8 +4206,8 @@ class _LandingKeywordChipV2 extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: keyword.keyword,
-                    style: const TextStyle(
-                      color: Color(0xFF0F172A),
+                    style: TextStyle(
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
                     ),
@@ -2614,7 +4215,7 @@ class _LandingKeywordChipV2 extends StatelessWidget {
                   TextSpan(
                     text: ' · $secondary',
                     style: TextStyle(
-                      color: Colors.blueGrey.shade500,
+                      color: isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500,
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
                     ),
@@ -2642,6 +4243,7 @@ class _LandingHotIssueCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final displayKeywords = keywords.take(2).toList();
 
     return Padding(
@@ -2659,7 +4261,7 @@ class _LandingHotIssueCard extends StatelessWidget {
                 width: 26,
                 height: 26,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEEF4FF),
+                  color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(
@@ -2681,8 +4283,8 @@ class _LandingHotIssueCard extends StatelessWidget {
                           : issue.keyword,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF0F172A),
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
                         fontSize: 14,
                         height: 1.35,
                         fontWeight: FontWeight.w800,
@@ -2692,7 +4294,7 @@ class _LandingHotIssueCard extends StatelessWidget {
                     Text(
                       '관련 기사 ${issue.currentCount}건',
                       style: TextStyle(
-                        color: Colors.blueGrey.shade600,
+                        color: isDark ? Colors.grey.shade400 : Colors.blueGrey.shade600,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -2730,16 +4332,17 @@ class _LandingMiniTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         text,
-        style: const TextStyle(
-          color: Color(0xFF334155),
+        style: TextStyle(
+          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),
@@ -2758,7 +4361,8 @@ class _LandingGroupedNewsTile extends StatefulWidget {
   });
 
   @override
-  State<_LandingGroupedNewsTile> createState() => _LandingGroupedNewsTileState();
+  State<_LandingGroupedNewsTile> createState() =>
+      _LandingGroupedNewsTileState();
 }
 
 class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
@@ -2766,13 +4370,14 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final item = widget.cluster.representative;
     final hasLink = item.link.trim().isNotEmpty;
     final source = item.source.trim().isEmpty ? 'News' : item.source.trim();
-    final category = item.category.trim().isEmpty ? 'General' : item.category.trim();
-    final timeLabel = _landingCompactTime(item.published.isNotEmpty
-        ? item.published
-        : item.createdAt);
+    final category =
+        item.category.trim().isEmpty ? 'General' : item.category.trim();
+    final timeLabel = _landingCompactTime(
+        item.published.isNotEmpty ? item.published : item.createdAt);
     final extraCount = widget.cluster.articleCount - 1;
 
     return MouseRegion(
@@ -2788,7 +4393,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
         curve: Curves.easeOut,
         transform: Matrix4.translationValues(0, _isHovered ? -2 : 0, 0),
         child: Material(
-          color: Colors.white,
+          color: isDark ? const Color(0xFF111827) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           child: InkWell(
             borderRadius: BorderRadius.circular(20),
@@ -2801,16 +4406,19 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: _isHovered
-                      ? const Color(0xFFD8E5FF)
-                      : const Color(0xFFE5E7EB),
+                      ? (isDark ? const Color(0xFF334155) : const Color(0xFFD8E5FF))
+                      : (isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB)),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0F172A).withOpacity(_isHovered ? 0.06 : 0.04),
+                    color: isDark
+                        ? Colors.black.withOpacity(_isHovered ? 0.30 : 0.20)
+                        : const Color(0xFF0F172A).withOpacity(_isHovered ? 0.06 : 0.04),
                     blurRadius: _isHovered ? 24 : 20,
                     offset: const Offset(0, 8),
                   ),
                 ],
+                color: isDark ? const Color(0xFF111827) : Colors.white,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2821,7 +4429,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                         width: 20,
                         height: 20,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEEF4FF),
+                          color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Center(
@@ -2842,7 +4450,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.blueGrey.shade700,
+                            color: isDark ? Colors.white : Colors.blueGrey.shade700,
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                           ),
@@ -2850,15 +4458,16 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF3F4F6),
+                          color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           category,
                           style: TextStyle(
-                            color: Colors.blueGrey.shade600,
+                            color: isDark ? Colors.grey.shade100 : Colors.blueGrey.shade600,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                           ),
@@ -2868,7 +4477,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                       Text(
                         timeLabel,
                         style: TextStyle(
-                          color: Colors.blueGrey.shade500,
+                          color: isDark ? Colors.grey.shade100 : Colors.blueGrey.shade500,
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
                         ),
@@ -2880,8 +4489,8 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                     item.koreanTitle,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF0F172A),
+                    style: TextStyle(
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
                       fontSize: 15,
                       height: 1.28,
                       fontWeight: FontWeight.w700,
@@ -2894,7 +4503,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.blueGrey.shade600,
+                        color: isDark ? Colors.grey.shade200 : Colors.blueGrey.shade600,
                         fontSize: 14,
                         height: 1.42,
                         fontWeight: FontWeight.w400,
@@ -2905,15 +4514,18 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEEF4FF),
+                          color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          extraCount > 0 ? '묶음 ${widget.cluster.articleCount}건' : '단일 기사',
+                          extraCount > 0
+                              ? '묶음 ${widget.cluster.articleCount}건'
+                              : '단일 기사',
                           style: TextStyle(
-                            color: Colors.blue.shade700,
+                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
                             fontSize: 11.5,
                             fontWeight: FontWeight.w800,
                           ),
@@ -2921,15 +4533,16 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
+                          color: isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           '언론사 ${widget.cluster.sourceCount}곳',
                           style: TextStyle(
-                            color: Colors.blueGrey.shade600,
+                            color: isDark ? Colors.grey.shade200 : Colors.blueGrey.shade600,
                             fontSize: 10.5,
                             fontWeight: FontWeight.w800,
                           ),
@@ -2940,7 +4553,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                         Text(
                           '외 $extraCount건',
                           style: TextStyle(
-                            color: Colors.blueGrey.shade500,
+                            color: isDark ? Colors.grey.shade100 : Colors.blueGrey.shade500,
                             fontSize: 10.5,
                             fontWeight: FontWeight.w700,
                           ),
@@ -2964,7 +4577,8 @@ class _LandingSearchResultTile extends StatefulWidget {
   const _LandingSearchResultTile({required this.item});
 
   @override
-  State<_LandingSearchResultTile> createState() => _LandingSearchResultTileState();
+  State<_LandingSearchResultTile> createState() =>
+      _LandingSearchResultTileState();
 }
 
 class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
@@ -2972,13 +4586,14 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final item = widget.item;
     final hasLink = item.link.trim().isNotEmpty;
     final source = item.source.trim().isEmpty ? 'News' : item.source.trim();
-    final category = item.category.trim().isEmpty ? 'General' : item.category.trim();
-    final timeLabel = _landingCompactTime(item.published.isNotEmpty
-        ? item.published
-        : item.createdAt);
+    final category =
+        item.category.trim().isEmpty ? 'General' : item.category.trim();
+    final timeLabel = _landingCompactTime(
+        item.published.isNotEmpty ? item.published : item.createdAt);
 
     return MouseRegion(
       cursor: hasLink ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -2988,12 +4603,12 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
       onExit: (_) {
         if (mounted) setState(() => _isHovered = false);
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
         transform: Matrix4.translationValues(0, _isHovered ? -2 : 0, 0),
         child: Material(
-          color: Colors.white,
+          color: isDark ? const Color(0xFF111827) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           child: InkWell(
             borderRadius: BorderRadius.circular(20),
@@ -3006,16 +4621,19 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: _isHovered
-                      ? const Color(0xFFD8E5FF)
-                      : const Color(0xFFE5E7EB),
+                      ? (isDark ? const Color(0xFF334155) : const Color(0xFFD8E5FF))
+                      : (isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB)),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0F172A).withOpacity(_isHovered ? 0.06 : 0.04),
+                    color: isDark
+                        ? Colors.black.withOpacity(_isHovered ? 0.30 : 0.20)
+                        : const Color(0xFF0F172A).withOpacity(_isHovered ? 0.06 : 0.04),
                     blurRadius: _isHovered ? 24 : 20,
                     offset: const Offset(0, 8),
                   ),
                 ],
+                color: isDark ? const Color(0xFF111827) : Colors.white,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3026,7 +4644,7 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                         width: 20,
                         height: 20,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEEF4FF),
+                          color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Center(
@@ -3047,7 +4665,7 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.blueGrey.shade700,
+                            color: isDark ? Colors.grey.shade200 : Colors.blueGrey.shade700,
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                           ),
@@ -3060,13 +4678,13 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF3F4F6),
+                          color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           category,
                           style: TextStyle(
-                            color: Colors.blueGrey.shade600,
+                            color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade600,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                           ),
@@ -3076,7 +4694,7 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                       Text(
                         timeLabel,
                         style: TextStyle(
-                          color: Colors.blueGrey.shade500,
+                        color: isDark ? Colors.grey.shade100 : Colors.blueGrey.shade500,
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
                         ),
@@ -3088,12 +4706,12 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                     item.koreanTitle,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontSize: 15,
-                      height: 1.28,
-                      fontWeight: FontWeight.w700,
-                    ),
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontSize: 15,
+                        height: 1.28,
+                        fontWeight: FontWeight.w700,
+                      ),
                   ),
                   if (item.summaryKr.trim().isNotEmpty) ...[
                     const SizedBox(height: 6),
@@ -3102,7 +4720,7 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.blueGrey.shade600,
+                        color: isDark ? Colors.grey.shade100 : Colors.blueGrey.shade600,
                         fontSize: 14,
                         height: 1.42,
                         fontWeight: FontWeight.w400,
@@ -3223,21 +4841,23 @@ class _LandingSearchStateMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = isDark ? Colors.grey.shade200 : Colors.grey.shade500;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 42, color: Colors.grey.shade500),
+            Icon(icon, size: 42, color: iconColor),
             const SizedBox(height: 12),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w900,
-                color: Colors.black87,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
               ),
             ),
             const SizedBox(height: 6),
@@ -3247,7 +4867,7 @@ class _LandingSearchStateMessage extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 height: 1.45,
-                color: Colors.grey.shade600,
+                color: isDark ? Colors.grey.shade200 : Colors.grey.shade600,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -3279,12 +4899,13 @@ class _LandingMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.09),
+        color: isDark ? const Color(0xFF111827) : Colors.white.withOpacity(0.09),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
+        border: Border.all(color: isDark ? const Color(0xFF1F2937) : Colors.white.withOpacity(0.10)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3292,7 +4913,7 @@ class _LandingMetricCard extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.66),
+              color: isDark ? Colors.grey.shade400 : Colors.white.withOpacity(0.66),
               fontSize: 12,
               fontWeight: FontWeight.w800,
             ),
@@ -3457,9 +5078,9 @@ int _landingTrendScore(TrendInsightSnapshot insight) {
   final risingCount = topRising.isEmpty
       ? 0
       : topRising.fold<int>(
-              0,
-              (sum, item) => sum + item.currentCount + item.increaseCount,
-            ) ~/
+            0,
+            (sum, item) => sum + item.currentCount + item.increaseCount,
+          ) ~/
           topRising.length;
 
   final keywordScore = _landingTrendRatioScale(keywordCount, 130);
@@ -3467,7 +5088,8 @@ int _landingTrendScore(TrendInsightSnapshot insight) {
   final sentimentScore =
       1.0 - ((insight.sentiment.temperature - 50).abs() / 50).clamp(0, 1);
 
-  final mixed = keywordScore * 0.43 + risingScore * 0.37 + sentimentScore * 0.20;
+  final mixed =
+      keywordScore * 0.43 + risingScore * 0.37 + sentimentScore * 0.20;
   return (12 + mixed * 76).round().clamp(0, 100);
 }
 
@@ -3589,7 +5211,7 @@ String _landingTimelineStageLabel(String stage) {
 }
 
 String _landingTimelineTimeLabel(String value) {
-  final parsed = DateTime.tryParse(value.trim());
+  final parsed = _landingParseTimestamp(value);
   if (parsed == null) return '방금 전';
   final diff = DateTime.now().difference(parsed);
   if (!diff.isNegative) {
@@ -3899,6 +5521,480 @@ class _HoverButtonState extends State<_HoverButton> {
           child: widget.child,
         ),
       ),
+    );
+  }
+}
+
+class _LandingMarketConfig {
+  final String symbol;
+  final String tvSymbol;
+  final String title;
+  final String prefix;
+  final String group;
+
+  const _LandingMarketConfig({
+    required this.symbol,
+    required this.tvSymbol,
+    required this.title,
+    required this.prefix,
+    required this.group,
+  });
+}
+
+class _LandingMarketQuote {
+  final String symbol;
+  final String tvSymbol;
+  final String title;
+  final String prefix;
+  final String group;
+  final double currentPrice;
+  final double percentChange;
+  final DateTime? priceUpdatedAt;
+
+  const _LandingMarketQuote({
+    required this.symbol,
+    required this.tvSymbol,
+    required this.title,
+    required this.prefix,
+    required this.group,
+    required this.currentPrice,
+    required this.percentChange,
+    required this.priceUpdatedAt,
+  });
+}
+
+class _LandingSectorDominanceRowData {
+  final String label;
+  final List<String> keywords;
+  final double ratio;
+  final String valueText;
+  final String changeText;
+
+  const _LandingSectorDominanceRowData(
+    this.label,
+    this.keywords, {
+    this.ratio = 0,
+    this.valueText = '',
+    this.changeText = '',
+  });
+
+  bool matchesText(String keyword) {
+    final lower = keyword.toLowerCase();
+    return keywords.any((item) => lower.contains(item.toLowerCase()));
+  }
+}
+
+class _LandingMarketRankRow extends StatelessWidget {
+  final int rank;
+  final _LandingMarketQuote quote;
+
+  const _LandingMarketRankRow({
+    required this.rank,
+    required this.quote,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final up = quote.percentChange >= 0;
+    final changeColor = quote.percentChange == 0
+        ? (isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500)
+        : up
+            ? (isDark ? Colors.red.shade300 : Colors.red.shade600)
+            : (isDark ? Colors.blue.shade300 : Colors.blue.shade600);
+    final surface = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5);
+    final priceTextColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final muted = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500;
+    final code = _landingFormatStockCode(quote.symbol);
+    final updatedAt = quote.priceUpdatedAt;
+    final ageMinutes = updatedAt == null
+        ? null
+        : DateTime.now().difference(updatedAt).inMinutes;
+    final staleState = ageMinutes == null
+        ? '시세 확인 중'
+        : ageMinutes > 30
+            ? '시세 지연 가능'
+            : ageMinutes > 10
+                ? '시세 지연 가능'
+                : null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$rank',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  quote.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.2,
+                    fontWeight: FontWeight.w800,
+                    color: priceTextColor,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  code,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _landingFormatPrice(
+                  quote.currentPrice,
+                  marketType: 'kr',
+                  symbol: quote.symbol,
+                ),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: priceTextColor,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (staleState == null) ...[
+                    Icon(
+                      up
+                          ? Icons.arrow_upward_rounded
+                          : Icons.arrow_downward_rounded,
+                      size: 14,
+                      color: changeColor,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    staleState == null
+                        ? '등락률 ${_landingFormatPercent(quote.percentChange)}'
+                        : staleState,
+                    style: TextStyle(
+                      fontSize: 11.2,
+                      fontWeight: FontWeight.w800,
+                      color: staleState != null ? muted : changeColor,
+                    ),
+                  ),
+                ],
+              ),
+              if (updatedAt != null) ...[
+                const SizedBox(height: 1),
+                Text(
+                  '시세 ${_landingFormatUpdatedAt(updatedAt)}',
+                  style: TextStyle(
+                    fontSize: 9.8,
+                    fontWeight: FontWeight.w600,
+                    color: muted,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LandingMarketSummaryCard extends StatelessWidget {
+  final _LandingMarketQuote quote;
+
+  const _LandingMarketSummaryCard({
+    required this.quote,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final up = quote.percentChange >= 0;
+    final accent = up
+        ? (isDark ? Colors.red.shade300 : Colors.red.shade600)
+        : (isDark ? Colors.blue.shade300 : Colors.blue.shade600);
+    final surface = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final muted = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500;
+    final formattedPrice = _landingMarketPriceLabel(quote);
+    final updatedAt = quote.priceUpdatedAt;
+    final ageMinutes = updatedAt == null
+        ? null
+        : DateTime.now().difference(updatedAt).inMinutes;
+    final staleState = ageMinutes == null
+        ? '시세 확인 중'
+        : ageMinutes > 30
+            ? '시세 지연 가능'
+            : ageMinutes > 10
+                ? '시세 지연 가능'
+                : null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            quote.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12.2,
+              fontWeight: FontWeight.w800,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            formattedPrice,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 14.0,
+              fontWeight: FontWeight.w900,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Row(
+            children: [
+              Icon(
+                up ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                size: 13,
+                color: accent,
+              ),
+              const SizedBox(width: 3),
+              Text(
+                _landingFormatPercent(quote.percentChange),
+                style: TextStyle(
+                  fontSize: 11.2,
+                  fontWeight: FontWeight.w800,
+                  color: accent,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '전일 대비',
+                style: TextStyle(
+                  fontSize: 10.0,
+                  fontWeight: FontWeight.w700,
+                  color: muted,
+                ),
+              ),
+            ],
+          ),
+          if (staleState != null) ...[
+            const SizedBox(height: 1),
+            Text(
+              staleState,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+                color: muted,
+              ),
+            ),
+          ] else if (updatedAt != null) ...[
+            const SizedBox(height: 1),
+            Text(
+              '시세 ${_landingFormatUpdatedAt(updatedAt)}',
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+                color: muted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LandingExchangeRateRow extends StatelessWidget {
+  final _LandingMarketQuote quote;
+
+  const _LandingExchangeRateRow({
+    required this.quote,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final up = quote.percentChange >= 0;
+    final accent = up
+        ? (isDark ? Colors.red.shade300 : Colors.red.shade600)
+        : (isDark ? Colors.blue.shade300 : Colors.blue.shade600);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final muted = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 88,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  quote.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '전일 대비',
+                  style: TextStyle(
+                    color: muted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _landingMarketPriceLabel(quote),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 13.2,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                size: 13,
+                color: accent,
+              ),
+              const SizedBox(width: 3),
+              Text(
+                _landingFormatPercent(quote.percentChange),
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 11.2,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LandingDominanceRow extends StatelessWidget {
+  final String label;
+  final String valueText;
+  final String changeText;
+  final double ratio;
+
+  const _LandingDominanceRow({
+    required this.label,
+    required this.valueText,
+    required this.changeText,
+    required this.ratio,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final muted = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Text(
+              valueText,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              changeText,
+              style: TextStyle(
+                color: muted,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            minHeight: 5,
+            value: ratio.clamp(0.0, 1.0),
+            backgroundColor:
+                isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF7),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -34,6 +34,8 @@ const ISSUE_TIMELINE_WINDOWS = [
 ];
 
 const VALID_CATEGORIES = ['경제', '세계', '사회', '정치', '생활/문화', 'IT/과학'];
+const MARKET_DATA_CACHE_TTL_MS = 45 * 1000;
+const MARKET_DATA_CACHE = new Map();
 
 export default {
   async fetch(request, env) {
@@ -1743,6 +1745,11 @@ async function handleGetAiStockSentiment(url, env, corsHeaders) {
 
 async function handleGetMarketData(url, corsHeaders) {
   const symbolsParam = url.searchParams.get('symbols');
+  const interval = normalizeChartInterval(url.searchParams.get('interval') || '1d');
+  const range = normalizeChartRange(
+    url.searchParams.get('range') || defaultChartRangeForInterval(interval),
+    interval,
+  );
 
   if (!symbolsParam) {
     return jsonResponse({ success: false, error: 'Missing symbols parameter' }, corsHeaders, 400);
@@ -1758,10 +1765,20 @@ async function handleGetMarketData(url, corsHeaders) {
     return jsonResponse({ success: false, error: 'No valid symbols' }, corsHeaders, 400);
   }
 
+  const cacheKey = buildMarketDataCacheKey(symbols, interval, range);
+  const cachedEntry = MARKET_DATA_CACHE.get(cacheKey);
+  const now = Date.now();
+  if (cachedEntry && cachedEntry.expiresAt > now) {
+    return jsonResponse({
+      ...cachedEntry.payload,
+      cacheHit: true,
+    }, corsHeaders);
+  }
+
   const results = await Promise.all(
     symbols.map(async symbol => {
       try {
-        const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=7d`;
+        const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${encodeURIComponent(interval)}&range=${encodeURIComponent(range)}`;
 
         const response = await fetch(yfUrl, {
           headers: {
@@ -1800,9 +1817,25 @@ async function handleGetMarketData(url, corsHeaders) {
             : meta.chartPreviousClose;
         }
 
+        const intradayWindow = interval !== '1d' || range === '1d';
+        if (intradayWindow) {
+          const intradayPrices = (indicators.close || [])
+            .filter(v => v !== null && v !== undefined);
+
+          if (intradayPrices.length > 1) {
+            previousClose = intradayPrices[0];
+          }
+        }
+
         const percentChange = previousClose
           ? ((currentPrice - previousClose) / previousClose) * 100
           : 0;
+
+        const priceUpdatedAt = meta.regularMarketTime
+          ? new Date(meta.regularMarketTime * 1000).toISOString()
+          : (result.timestamp && result.timestamp.length > 0
+              ? new Date(result.timestamp[result.timestamp.length - 1] * 1000).toISOString()
+              : new Date().toISOString());
 
         const chartData = (indicators.close || [])
           .map(val => val !== null && val !== undefined ? val : previousClose)
@@ -1812,6 +1845,7 @@ async function handleGetMarketData(url, corsHeaders) {
           symbol,
           currentPrice,
           percentChange,
+          priceUpdatedAt,
           chartData,
         };
       } catch (error) {
@@ -1825,9 +1859,20 @@ async function handleGetMarketData(url, corsHeaders) {
     })
   );
 
-  return jsonResponse({
+  const payload = {
     success: true,
+    fetchedAt: new Date().toISOString(),
     data: results,
+  };
+
+  MARKET_DATA_CACHE.set(cacheKey, {
+    expiresAt: now + MARKET_DATA_CACHE_TTL_MS,
+    payload,
+  });
+
+  return jsonResponse({
+    ...payload,
+    cacheHit: false,
   }, corsHeaders);
 }
 
@@ -1838,14 +1883,25 @@ async function handleGetMarketData(url, corsHeaders) {
 async function handleGetChartData(url, corsHeaders) {
   const symbol = url.searchParams.get('symbol');
   const interval = normalizeChartInterval(url.searchParams.get('interval') || '1d');
-  const range = normalizeChartRange(url.searchParams.get('range') || defaultChartRangeForInterval(interval));
+  const range = normalizeChartRange(
+    url.searchParams.get('range') || defaultChartRangeForInterval(interval),
+    interval,
+  );
+  const sourceInterval = getChartSourceInterval(interval);
+  const aggregationMinutes = getChartIntervalMinutes(interval);
+  const sourceRange = isIntradayChartInterval(interval)
+    ? '5d'
+    : normalizeChartRange(
+        url.searchParams.get('range') || defaultChartRangeForInterval(interval),
+        sourceInterval,
+      );
 
   if (!symbol) {
     return jsonResponse({ success: false, error: 'Missing symbol parameter' }, corsHeaders, 400);
   }
 
   try {
-    const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${encodeURIComponent(interval)}&range=${encodeURIComponent(range)}`;
+    const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${encodeURIComponent(sourceInterval)}&range=${encodeURIComponent(sourceRange)}`;
 
     const response = await fetch(yfUrl, {
       headers: {
@@ -1886,13 +1942,20 @@ async function handleGetChartData(url, corsHeaders) {
       })
       .filter(d => d.close > 0);
 
-    return jsonResponse({
-      success: true,
-      symbol,
-      interval,
-      range,
-      data: candleData,
-    }, corsHeaders);
+    const finalData = aggregationMinutes > getChartIntervalMinutes(sourceInterval) && aggregationMinutes > 0
+      ? aggregateCandles(candleData, aggregationMinutes)
+      : candleData;
+
+      return jsonResponse({
+        success: true,
+        symbol,
+        interval,
+        range,
+        sourceInterval,
+        sourceRange,
+        fetchedAt: new Date().toISOString(),
+        data: finalData,
+      }, corsHeaders);
   } catch (error) {
     console.error(`Error fetching chart for ${symbol}:`, error.message);
 
@@ -2596,15 +2659,75 @@ function periodToHours(period) {
 
 function normalizeChartInterval(interval) {
   const value = String(interval || '').toLowerCase();
-  return ['1d', '1wk', '1mo'].includes(value) ? value : '1d';
+  return ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '120m', '4h', '1d', '1wk', '1mo'].includes(value)
+    ? value
+    : '1d';
 }
 
-function normalizeChartRange(range) {
+function isIntradayChartInterval(interval) {
+  return ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '120m', '4h'].includes(normalizeChartInterval(interval));
+}
+
+function getChartIntervalMinutes(interval) {
+  switch (normalizeChartInterval(interval)) {
+    case '1m':
+      return 1;
+    case '2m':
+      return 2;
+    case '5m':
+      return 5;
+    case '15m':
+      return 15;
+    case '30m':
+      return 30;
+    case '60m':
+      return 60;
+    case '90m':
+      return 90;
+    case '120m':
+      return 120;
+    case '4h':
+      return 240;
+    default:
+      return 0;
+  }
+}
+
+function getChartSourceInterval(interval) {
+  const normalized = normalizeChartInterval(interval);
+  if (normalized === '120m' || normalized === '4h') return '60m';
+  return normalized;
+}
+
+function normalizeChartRange(range, interval = '1d') {
   const value = String(range || '').toLowerCase();
-  return ['6mo', '1y', '2y', '5y', '10y'].includes(value) ? value : '6mo';
+  if (isIntradayChartInterval(interval)) {
+    return ['1d', '5d', '1mo', '3mo', '6mo'].includes(value) ? value : '1d';
+  }
+  return ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'].includes(value)
+    ? value
+    : '6mo';
+}
+
+function buildMarketDataCacheKey(symbols, interval, range) {
+  return [
+    normalizeChartInterval(interval),
+    normalizeChartRange(range, interval),
+    [...symbols].slice().sort().join(','),
+  ].join('|');
 }
 
 function defaultChartRangeForInterval(interval) {
+  if (isIntradayChartInterval(interval)) {
+    const normalized = normalizeChartInterval(interval);
+    if (normalized === '1m' || normalized === '2m' || normalized === '5m') return '1d';
+    if (normalized === '15m' || normalized === '30m') return '5d';
+    if (normalized === '60m' || normalized === '90m') return '1mo';
+    if (normalized === '120m') return '3mo';
+    if (normalized === '4h') return '6mo';
+    return '1d';
+  }
+
   switch (normalizeChartInterval(interval)) {
     case '1wk':
       return '5y';
@@ -2614,4 +2737,40 @@ function defaultChartRangeForInterval(interval) {
     default:
       return '6mo';
   }
+}
+
+function aggregateCandles(candles, bucketMinutes) {
+  if (!Array.isArray(candles) || candles.length === 0) return [];
+  if (!bucketMinutes || bucketMinutes <= 0) return candles;
+
+  const bucketSeconds = bucketMinutes * 60;
+  const groups = new Map();
+
+  for (const candle of candles) {
+    const time = Number(candle?.time);
+    if (!Number.isFinite(time)) continue;
+
+    const bucketTime = Math.floor(time / bucketSeconds) * bucketSeconds;
+    if (!groups.has(bucketTime)) {
+      groups.set(bucketTime, []);
+    }
+    groups.get(bucketTime).push(candle);
+  }
+
+  return Array.from(groups.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([bucketTime, group]) => {
+      const first = group[0];
+      const last = group[group.length - 1];
+      const high = Math.max(...group.map(item => Number(item.high) || 0));
+      const low = Math.min(...group.map(item => Number(item.low) || 0));
+      return {
+        time: bucketTime,
+        open: Number(first.open) || Number(first.close) || 0,
+        high: high || Number(first.close) || 0,
+        low: low || Number(first.close) || 0,
+        close: Number(last.close) || Number(first.close) || 0,
+      };
+    })
+    .filter(item => item.close > 0);
 }

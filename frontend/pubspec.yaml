@@ -19,6 +19,7 @@ dependencies:
   fl_chart: ^1.2.0
   webview_flutter: ^4.4.2
   webview_flutter_web: ^0.2.3+4
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:
