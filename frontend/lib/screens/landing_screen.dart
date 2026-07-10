@@ -142,6 +142,16 @@ DateTime? _landingLatestUpdatedAt(Iterable<_LandingMarketQuote> quotes) {
   return dates.last;
 }
 
+_LandingMarketQuote? _landingQuoteByTitle(
+  List<_LandingMarketQuote> quotes,
+  String title,
+) {
+  for (final quote in quotes) {
+    if (quote.title == title) return quote;
+  }
+  return null;
+}
+
 String _landingMarketPriceLabel(_LandingMarketQuote quote) {
   switch (quote.group) {
     case 'fx':
@@ -231,6 +241,7 @@ class _LandingScreenState extends State<LandingScreen>
   late Future<List<IssueTimelineItem>> _timelineFuture;
   late Future<List<TrendItem>> _latestNewsFuture;
   final List<_LandingMarketQuote> _marketQuotes = [];
+  final Set<int> _readNewsIds = <int>{};
   Timer? _marketRefreshTimer;
   bool _marketFetching = false;
   bool _marketRefreshing = false;
@@ -336,23 +347,27 @@ class _LandingScreenState extends State<LandingScreen>
                   child: _buildPlatformHero(isMobile),
                 ),
                 _FadeInOnScroll(
-                  delay: 120,
+                  delay: 90,
+                  child: _buildMarketMoodSection(isMobile),
+                ),
+                _FadeInOnScroll(
+                  delay: 150,
                   child: _buildBreakingNewsSection(isMobile),
                 ),
                 _FadeInOnScroll(
-                  delay: 180,
+                  delay: 210,
                   child: _buildMarketOverviewSection(isMobile),
                 ),
                 _FadeInOnScroll(
-                  delay: 240,
+                  delay: 270,
                   child: _buildExchangeRateSection(isMobile),
                 ),
                 _FadeInOnScroll(
-                  delay: 300,
+                  delay: 330,
                   child: _buildPopularStocksSection(isMobile),
                 ),
                 _FadeInOnScroll(
-                  delay: 360,
+                  delay: 390,
                   child: _buildMarketDominanceSection(isMobile),
                 ),
                 const SizedBox(height: 70),
@@ -470,7 +485,7 @@ class _LandingScreenState extends State<LandingScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '분석 기사 ${analyzedCount}건',
+                                  '분석 기사 ${analyzedCount}건 · 마지막 ${_marketLastUpdatedAt == null ? '--:--' : _landingFormatUpdatedAt(_marketLastUpdatedAt)}',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w800,
@@ -552,6 +567,15 @@ class _LandingScreenState extends State<LandingScreen>
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (context) => page),
     );
+  }
+
+  Future<void> _openLandingTrendItemArticle(TrendItem item) async {
+    if (item.id > 0) {
+      setState(() {
+        _readNewsIds.add(item.id);
+      });
+    }
+    await _landingOpenArticle(context, item.link);
   }
 
   Widget _navItem(String text, VoidCallback onTap) {
@@ -978,13 +1002,16 @@ class _LandingScreenState extends State<LandingScreen>
 
   Widget _buildBreakingNewsSection(bool isMobile) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final maxItems = isMobile ? 6 : 7;
+    final maxItems = 5;
     return FutureBuilder<List<TrendItem>>(
       future: _latestNewsFuture,
       builder: (context, snapshot) {
         final loading = snapshot.connectionState == ConnectionState.waiting;
         final rawItems = (snapshot.data ?? const <TrendItem>[]).toList()
           ..sort((a, b) {
+            final ai = _landingNewsPriorityRank(a);
+            final bi = _landingNewsPriorityRank(b);
+            if (ai != bi) return ai.compareTo(bi);
             final aDate =
                 _landingTrendDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
             final bDate =
@@ -1090,14 +1117,15 @@ class _LandingScreenState extends State<LandingScreen>
                     else
                       Column(
                         children: [
-                          for (int i = 0; i < items.length; i++) ...[
-                            _BreakingNewsTimelineTile(
-                              item: items[i],
-                              isFeatured: i == 0,
-                              onTap: items[i].link.trim().isNotEmpty
-                                  ? () => _landingOpenArticle(context, items[i].link)
-                                  : null,
-                            ),
+                            for (int i = 0; i < items.length; i++) ...[
+                              _BreakingNewsTimelineTile(
+                                item: items[i],
+                                isFeatured: i == 0,
+                                isRead: _readNewsIds.contains(items[i].id),
+                                onTap: items[i].link.trim().isNotEmpty
+                                    ? () => _openLandingTrendItemArticle(items[i])
+                                    : null,
+                              ),
                             if (i != items.length - 1)
                               Divider(
                                 height: 18,
@@ -1108,6 +1136,151 @@ class _LandingScreenState extends State<LandingScreen>
                               ),
                           ],
                         ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMarketMoodSection(bool isMobile) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return FutureBuilder<TrendInsightSnapshot>(
+      future: _insightFuture,
+      builder: (context, snapshot) {
+        final insight = snapshot.data;
+        final domesticMood = insight == null
+            ? '분석 대기'
+            : _landingSectorMoodLabel(insight);
+        final sentiment = insight?.sentiment;
+        final sentimentLabel = sentiment == null
+            ? '시황 관찰 중'
+            : '${sentiment.temperature} · ${_landingSentimentLabel(sentiment.temperature)}';
+        final sentimentDetail = sentiment == null
+            ? '최근 뉴스 흐름을 집계 중입니다.'
+            : sentiment.summary.trim().isEmpty
+                ? '뉴스 감정과 시장 흐름을 함께 보고 있습니다.'
+                : sentiment.summary.trim();
+
+        final nasdaqQuote = _landingQuoteByTitle(_marketQuotes, '나스닥100 선물');
+        final fxQuote = _landingQuoteByTitle(_marketQuotes, 'USD/KRW');
+        final usMood = nasdaqQuote == null
+            ? '관찰 중'
+            : nasdaqQuote.percentChange > 0
+                ? '긍정'
+                : nasdaqQuote.percentChange < 0
+                    ? '부정'
+                    : '중립';
+        final fxMood = fxQuote == null
+            ? '관찰 중'
+            : fxQuote.percentChange > 0
+                ? '원화 약세'
+                : fxQuote.percentChange < 0
+                    ? '원화 강세'
+                    : '중립';
+        final updatedAt = _marketLastUpdatedAt;
+        final updatedLabel = updatedAt == null
+            ? '업데이트 대기'
+            : '마지막 업데이트 ${_landingFormatUpdatedAt(updatedAt)}';
+
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1180),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFBFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Icon(
+                            Icons.insights_rounded,
+                            size: 16,
+                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '시장 분위기',
+                                style: TextStyle(
+                                  fontSize: 13.8,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                updatedLabel,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (snapshot.connectionState == ConnectionState.waiting)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.6,
+                                color: isDark ? Colors.blue.shade200 : Colors.blue.shade600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (insight == null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5),
+                          ),
+                        ),
+                        child: Text(
+                          '시장 분위기를 분석하는 중입니다.',
+                          style: TextStyle(
+                            color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    else
+                      _LandingMarketMoodRow(
+                        data: insight,
+                        marketQuotes: _marketQuotes,
                       ),
                   ],
                 ),
@@ -1256,8 +1429,9 @@ class _LandingScreenState extends State<LandingScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final targets = [
       _landingQuoteByTitle(_marketQuotes, 'USD/KRW'),
-      _landingQuoteByTitle(_marketQuotes, 'EUR/USD'),
-      _landingQuoteByTitle(_marketQuotes, 'USD/JPY'),
+      _landingQuoteByTitle(_marketQuotes, 'JPY/KRW'),
+      _landingQuoteByTitle(_marketQuotes, 'EUR/KRW'),
+      _landingQuoteByTitle(_marketQuotes, 'CNY/KRW'),
     ].whereType<_LandingMarketQuote>().toList();
     final updatedAt = _landingLatestUpdatedAt(targets) ?? _marketLastUpdatedAt;
     final updatedLabel = updatedAt == null
@@ -1675,6 +1849,13 @@ class _LandingScreenState extends State<LandingScreen>
         group: 'fx',
       ),
       _LandingMarketConfig(
+        symbol: 'CNY=X',
+        tvSymbol: 'FX:USDCNY',
+        title: 'USD/CNY',
+        prefix: '',
+        group: 'fx',
+      ),
+      _LandingMarketConfig(
         symbol: '005930.KS',
         tvSymbol: 'KRX:005930',
         title: '삼성전자',
@@ -1740,28 +1921,136 @@ class _LandingScreenState extends State<LandingScreen>
     };
 
     final quotes = <_LandingMarketQuote>[];
-    for (final config in configs) {
+
+    _LandingMarketQuote? buildBaseQuote(
+      _LandingMarketConfig config, {
+      String? titleOverride,
+    }) {
       final raw = bySymbol[config.symbol];
-      if (raw == null || raw['error'] != null) continue;
+      if (raw == null || raw['error'] != null) return null;
       final currentPrice = (raw['currentPrice'] as num?)?.toDouble();
       final percentChange = (raw['percentChange'] as num?)?.toDouble();
-      if (currentPrice == null || percentChange == null) continue;
+      if (currentPrice == null || percentChange == null) return null;
       final priceUpdatedAt = _landingParseTimestamp(
         raw['priceUpdatedAt']?.toString() ?? '',
       );
+      final chartData = (raw['chartData'] as List<dynamic>?)
+              ?.whereType<num>()
+              .map((value) => value.toDouble())
+              .toList() ??
+          const <double>[];
 
-      quotes.add(
-        _LandingMarketQuote(
-          symbol: config.symbol,
-          tvSymbol: config.tvSymbol,
-          title: config.title,
-          prefix: config.prefix,
-          group: config.group,
-          currentPrice: currentPrice,
-          percentChange: percentChange,
-          priceUpdatedAt: priceUpdatedAt,
-        ),
+      return _LandingMarketQuote(
+        symbol: config.symbol,
+        tvSymbol: config.tvSymbol,
+        title: titleOverride ?? config.title,
+        prefix: config.prefix,
+        group: config.group,
+        currentPrice: currentPrice,
+        percentChange: percentChange,
+        priceUpdatedAt: priceUpdatedAt,
+        chartData: chartData,
       );
+    }
+
+    final baseQuotes = <String, _LandingMarketQuote>{};
+    for (final config in configs) {
+      if (config.group != 'fx') {
+        final quote = buildBaseQuote(config);
+        if (quote != null) {
+          quotes.add(quote);
+        }
+      } else {
+        final quote = buildBaseQuote(config);
+        if (quote != null) {
+          baseQuotes[config.symbol] = quote;
+        }
+      }
+    }
+
+    final usdKrw = baseQuotes['KRW=X'];
+    final eurUsd = baseQuotes['EURUSD=X'];
+    final usdJpy = baseQuotes['JPY=X'];
+    final usdCny = baseQuotes['CNY=X'];
+
+    _LandingMarketQuote? derivedFxQuote({
+      required String title,
+      required String symbol,
+      required double currentPrice,
+      required double percentChange,
+      required DateTime? updatedAt,
+    }) {
+      return _LandingMarketQuote(
+        symbol: symbol,
+        tvSymbol: symbol,
+        title: title,
+        prefix: '',
+        group: 'fx',
+        currentPrice: currentPrice,
+        percentChange: percentChange,
+        priceUpdatedAt: updatedAt,
+      );
+    }
+
+    if (usdKrw != null) {
+      quotes.add(derivedFxQuote(
+        title: 'USD/KRW',
+        symbol: 'KRW=X',
+        currentPrice: usdKrw.currentPrice,
+        percentChange: usdKrw.percentChange,
+        updatedAt: usdKrw.priceUpdatedAt,
+      )!);
+    }
+
+    if (usdKrw != null && usdJpy != null && usdJpy.currentPrice > 0) {
+      final currentPrice = usdKrw.currentPrice / usdJpy.currentPrice;
+      final percentChange = (((1 + usdKrw.percentChange / 100) /
+                  (1 + usdJpy.percentChange / 100)) -
+              1) *
+          100;
+      quotes.add(derivedFxQuote(
+        title: 'JPY/KRW',
+        symbol: 'JPY=X',
+        currentPrice: currentPrice,
+        percentChange: percentChange,
+        updatedAt: [usdKrw.priceUpdatedAt, usdJpy.priceUpdatedAt]
+            .whereType<DateTime>()
+            .fold<DateTime?>(null, (prev, item) => prev == null || item.isAfter(prev) ? item : prev),
+      )!);
+    }
+
+    if (usdKrw != null && eurUsd != null) {
+      final currentPrice = usdKrw.currentPrice * eurUsd.currentPrice;
+      final percentChange = (((1 + usdKrw.percentChange / 100) *
+                  (1 + eurUsd.percentChange / 100)) -
+              1) *
+          100;
+      quotes.add(derivedFxQuote(
+        title: 'EUR/KRW',
+        symbol: 'EURUSD=X',
+        currentPrice: currentPrice,
+        percentChange: percentChange,
+        updatedAt: [usdKrw.priceUpdatedAt, eurUsd.priceUpdatedAt]
+            .whereType<DateTime>()
+            .fold<DateTime?>(null, (prev, item) => prev == null || item.isAfter(prev) ? item : prev),
+      )!);
+    }
+
+    if (usdKrw != null && usdCny != null && usdCny.currentPrice > 0) {
+      final currentPrice = usdKrw.currentPrice / usdCny.currentPrice;
+      final percentChange = (((1 + usdKrw.percentChange / 100) /
+                  (1 + usdCny.percentChange / 100)) -
+              1) *
+          100;
+      quotes.add(derivedFxQuote(
+        title: 'CNY/KRW',
+        symbol: 'CNY=X',
+        currentPrice: currentPrice,
+        percentChange: percentChange,
+        updatedAt: [usdKrw.priceUpdatedAt, usdCny.priceUpdatedAt]
+            .whereType<DateTime>()
+            .fold<DateTime?>(null, (prev, item) => prev == null || item.isAfter(prev) ? item : prev),
+      )!);
     }
 
     return quotes;
@@ -3272,11 +3561,10 @@ class _LandingTrendPanel extends StatelessWidget {
     final score = _landingTrendScore(data);
     final delta = _landingTrendDelta(data);
     final timeLabel = _landingTimeLabel();
-    final bullets = _landingBriefingTextSafe(data)
-        .split('\n')
-        .where((line) => line.trim().isNotEmpty)
-        .take(3)
-        .toList();
+    final coreIssue = _landingCoreIssueLine(data);
+    final risingIssue = _landingRisingIssueLine(data);
+    final fallingIssue = _landingFallingIssueLine(data);
+    final marketImpact = _landingMarketImpactLines(data);
     final keywords = data.keywords
         .where((item) => _isLandingKeywordUseful(item.keyword))
         .take(6)
@@ -3445,41 +3733,121 @@ class _LandingTrendPanel extends StatelessWidget {
             );
           }
 
+          Widget briefingBlock() {
+            final impactChips = marketImpact.isEmpty
+                ? const <String>['국내 증시 중립', '환율 중립', '미국 선물 중립']
+                : marketImpact;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '오늘의 핵심 이슈',
+                  style: TextStyle(
+                    color: titleText,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  coreIssue,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: bodyText,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _LandingInfoPill(
+                      label: '상승 이슈',
+                      value: risingIssue,
+                      accent: isDark ? Colors.red.shade300 : Colors.red.shade600,
+                      background: isDark ? const Color(0xFF172554) : const Color(0xFFFFF1F2),
+                    ),
+                    _LandingInfoPill(
+                      label: '하락 이슈',
+                      value: fallingIssue,
+                      accent: isDark ? Colors.blue.shade300 : Colors.blue.shade600,
+                      background: isDark ? const Color(0xFF172554) : const Color(0xFFF8FAFC),
+                    ),
+                    _LandingInfoPill(
+                      label: '시장 영향',
+                      value: impactChips.first,
+                      accent: isDark ? Colors.blue.shade200 : const Color(0xFF2563EB),
+                      background: isDark ? const Color(0xFF111827) : const Color(0xFFEEF4FF),
+                    ),
+                  ],
+                ),
+                if (impactChips.length > 1) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final value in impactChips.skip(1).take(2))
+                        _LandingTinyBadge(
+                          text: value,
+                          foreground: isDark ? Colors.grey.shade100 : const Color(0xFF334155),
+                          background: isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
+                        ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => _LandingInsightDetailSheet(
+                        insight: data,
+                        score: score,
+                        delta: delta,
+                        marketImpact: marketImpact,
+                      ),
+                    ),
+                    icon: Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: ctaBg,
+                    ),
+                    label: Text(
+                      '상세 보기',
+                      style: TextStyle(
+                        color: ctaBg,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+
           if (isCompact) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 2),
-                for (final bullet in bullets)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '• ',
-                          style: TextStyle(
-                            color: Color(0xFF2563EB),
-                            height: 1.4,
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            bullet,
-                            style: TextStyle(
-                              color: bodyText,
-                              fontSize: 14,
-                              height: 1.42,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                briefingBlock(),
                 const SizedBox(height: 14),
                 trendScoreBlock(),
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
                 keywordsBlock(),
                 const SizedBox(height: 16),
                 _buildSearchAndCta(context, searchController, onSearch),
@@ -3490,7 +3858,8 @@ class _LandingTrendPanel extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 2),
+              briefingBlock(),
+              const SizedBox(height: 16),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -3499,35 +3868,13 @@ class _LandingTrendPanel extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final bullet in bullets)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '• ',
-                                  style: TextStyle(
-                                    color: Color(0xFF2563EB),
-                                    height: 1.4,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    bullet,
-                                    style: TextStyle(
-                                      color: bodyText,
-                                      fontSize: 14,
-                                      height: 1.42,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        const SizedBox(height: 14),
                         trendScoreBlock(),
+                        const SizedBox(height: 14),
+                        sectionTitle(
+                          '시장 분위기',
+                          '국내 증시 · 미국 선물 · 환율 · 공포·탐욕',
+                        ),
+                        const SizedBox(height: 12),
                       ],
                     ),
                   ),
@@ -4006,14 +4353,496 @@ class _LandingTinyBadge extends StatelessWidget {
   }
 }
 
+class _LandingUrgencyBadge extends StatelessWidget {
+  final String label;
+  final int severity;
+
+  const _LandingUrgencyBadge({
+    required this.label,
+    required this.severity,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final background = severity >= 5
+        ? (isDark ? const Color(0xFF3F1D1D) : const Color(0xFFFFF1F2))
+        : severity >= 4
+            ? (isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF))
+            : (isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6));
+    final foreground = severity >= 5
+        ? (isDark ? Colors.red.shade200 : Colors.red.shade600)
+        : severity >= 4
+            ? (isDark ? Colors.blue.shade200 : Colors.blue.shade700)
+            : (isDark ? Colors.grey.shade200 : Colors.blueGrey.shade600);
+    final dotColor = severity >= 5
+        ? (isDark ? Colors.red.shade200 : Colors.red.shade500)
+        : severity >= 4
+            ? (isDark ? Colors.blue.shade200 : Colors.blue.shade500)
+            : (isDark ? Colors.grey.shade300 : Colors.blueGrey.shade400);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: foreground,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LandingInfoPill extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color accent;
+  final Color background;
+
+  const _LandingInfoPill({
+    required this.label,
+    required this.value,
+    required this.accent,
+    required this.background,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.transparent : accent.withOpacity(0.08),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
+              fontSize: 10.3,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+              fontSize: 13.2,
+              fontWeight: FontWeight.w800,
+              height: 1.28,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LandingMiniStateChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final String detail;
+
+  const _LandingMiniStateChip({
+    required this.label,
+    required this.value,
+    required this.detail,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500,
+              fontSize: 10.0,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+              fontSize: 13.0,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            detail,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500,
+              fontSize: 10.0,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LandingMarketMoodRow extends StatelessWidget {
+  final TrendInsightSnapshot data;
+  final List<_LandingMarketQuote> marketQuotes;
+
+  const _LandingMarketMoodRow({
+    required this.data,
+    required this.marketQuotes,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sentiment = data.sentiment;
+    final domestic = _landingSectorMoodLabel(data);
+    final usQuote = _landingQuoteByTitle(marketQuotes, '나스닥100 선물');
+    final fxQuote = _landingQuoteByTitle(marketQuotes, 'USD/KRW');
+    final usLabel = usQuote == null
+        ? '관찰 중'
+        : usQuote.percentChange > 0
+            ? '긍정'
+            : usQuote.percentChange < 0
+                ? '부정'
+                : '중립';
+    final fxLabel = fxQuote == null
+        ? '관찰 중'
+        : fxQuote.percentChange > 0
+            ? '원화 약세'
+            : fxQuote.percentChange < 0
+                ? '원화 강세'
+                : '중립';
+    final greedLabel = _landingSentimentLabel(sentiment.temperature);
+
+    final chips = [
+      _LandingMiniStateChip(
+        label: '국내 증시',
+        value: domestic,
+        detail: sentiment.summary.trim().isEmpty
+            ? '뉴스 흐름 집계 중'
+            : sentiment.summary.trim(),
+      ),
+      _LandingMiniStateChip(
+        label: '미국 선물',
+        value: usLabel,
+        detail: usQuote == null ? '데이터 대기' : _landingFormatPercent(usQuote.percentChange),
+      ),
+      _LandingMiniStateChip(
+        label: '환율',
+        value: fxLabel,
+        detail: fxQuote == null ? '데이터 대기' : _landingFormatPercent(fxQuote.percentChange),
+      ),
+      _LandingMiniStateChip(
+        label: '공포·탐욕',
+        value: '${sentiment.temperature}, $greedLabel',
+        detail: 'AI 뉴스 기반 요약',
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 680;
+        if (isCompact) {
+          final chipWidth = (constraints.maxWidth - 8) / 2;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: chips
+                .map(
+                  (chip) => SizedBox(
+                    width: chipWidth,
+                    child: chip,
+                  ),
+                )
+                .toList(),
+          );
+        }
+
+        return GridView.count(
+          crossAxisCount: 4,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 4.4,
+          children: chips,
+        );
+      },
+    );
+  }
+}
+
+class _LandingInsightDetailSheet extends StatelessWidget {
+  final TrendInsightSnapshot insight;
+  final int score;
+  final int delta;
+  final List<String> marketImpact;
+
+  const _LandingInsightDetailSheet({
+    required this.insight,
+    required this.score,
+    required this.delta,
+    required this.marketImpact,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5);
+    final title = isDark ? Colors.white : const Color(0xFF0F172A);
+    final body = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade700;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.72,
+      minChildSize: 0.48,
+      maxChildSize: 0.92,
+      builder: (context, controller) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.30 : 0.12),
+                blurRadius: 24,
+                offset: const Offset(0, -8),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            child: Container(
+              color: surface,
+              child: ListView(
+                controller: controller,
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    '상세 AI 요약',
+                    style: TextStyle(
+                      color: title,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    insight.sentiment.summary.trim().isEmpty
+                        ? '오늘 뉴스 흐름을 요약하고 있습니다.'
+                        : insight.sentiment.summary.trim(),
+                    style: TextStyle(
+                      color: body,
+                      fontSize: 14,
+                      height: 1.55,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  _LandingInfoPill(
+                    label: '트렌드 점수',
+                    value: '$score${delta == 0 ? '' : ' (${delta >= 0 ? '+' : ''}$delta)'}',
+                    accent: isDark ? Colors.blue.shade200 : const Color(0xFF2563EB),
+                    background: isDark ? const Color(0xFF111827) : const Color(0xFFEEF4FF),
+                  ),
+                  const SizedBox(height: 12),
+                  _LandingInfoPill(
+                    label: '상승 이슈',
+                    value: insight.risingIssues.isEmpty
+                        ? '없음'
+                        : insight.risingIssues.take(2).map((e) => _cleanLandingKeyword(e.keyword)).join(' · '),
+                    accent: isDark ? Colors.red.shade200 : Colors.red.shade600,
+                    background: isDark ? const Color(0xFF172554) : const Color(0xFFFFF1F2),
+                  ),
+                  const SizedBox(height: 12),
+                  _LandingInfoPill(
+                    label: '시장 영향',
+                    value: marketImpact.join(' · '),
+                    accent: isDark ? Colors.blue.shade200 : const Color(0xFF2563EB),
+                    background: isDark ? const Color(0xFF111827) : const Color(0xFFEEF4FF),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    '키워드',
+                    style: TextStyle(
+                      color: title,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: insight.keywords.take(6).map((item) {
+                      return _LandingTinyBadge(
+                        text: item.keyword,
+                        foreground: isDark ? Colors.white : const Color(0xFF0F172A),
+                        background: isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LandingSparkline extends StatelessWidget {
+  final List<double> values;
+  final Color color;
+
+  const _LandingSparkline({
+    required this.values,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (values.length < 2) {
+      return const SizedBox.shrink();
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite ? constraints.maxWidth : 0.0;
+        final height = constraints.maxHeight.isFinite && constraints.maxHeight > 0
+            ? constraints.maxHeight
+            : 24.0;
+        return SizedBox(
+          width: width,
+          height: height,
+          child: CustomPaint(
+            painter: _LandingSparklinePainter(values: values, color: color),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LandingSparklinePainter extends CustomPainter {
+  final List<double> values;
+  final Color color;
+
+  const _LandingSparklinePainter({
+    required this.values,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0 || values.length < 2) return;
+    final minValue = values.reduce((a, b) => a < b ? a : b);
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
+    final range = (maxValue - minValue).abs() < 0.0001 ? 1.0 : (maxValue - minValue);
+
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+    final fill = Paint()
+      ..color = color.withOpacity(0.08)
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    final fillPath = Path();
+    for (int i = 0; i < values.length; i++) {
+      final x = (size.width * i) / (values.length - 1);
+      final normalized = (values[i] - minValue) / range;
+      final y = size.height - (normalized * (size.height - 4)) - 2;
+      if (i == 0) {
+        path.moveTo(x, y);
+        fillPath.moveTo(x, size.height);
+        fillPath.lineTo(x, y);
+      } else {
+        path.lineTo(x, y);
+        fillPath.lineTo(x, y);
+      }
+    }
+    fillPath.lineTo(size.width, size.height);
+    fillPath.close();
+
+    canvas.drawPath(fillPath, fill);
+    canvas.drawPath(path, stroke);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LandingSparklinePainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.values != values;
+  }
+}
+
 class _BreakingNewsTimelineTile extends StatelessWidget {
   final TrendItem item;
   final bool isFeatured;
+  final bool isRead;
   final VoidCallback? onTap;
 
   const _BreakingNewsTimelineTile({
     required this.item,
     this.isFeatured = false,
+    this.isRead = false,
     required this.onTap,
   });
 
@@ -4027,7 +4856,9 @@ class _BreakingNewsTimelineTile extends StatelessWidget {
     final relativeLabel = _landingRelativeTimeLabel(dateTime);
     final category = item.category.trim().isNotEmpty ? item.category.trim() : '속보';
     final source = _landingSourceLabel(item.source);
-    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final titleColor = isDark
+        ? (isRead ? Colors.grey.shade300 : Colors.white)
+        : (isRead ? Colors.blueGrey.shade600 : const Color(0xFF0F172A));
     final bodyColor = isDark ? Colors.grey.shade200 : Colors.blueGrey.shade600;
     final lineColor = isDark ? const Color(0xFF334155) : const Color(0xFFE5E7EB);
     final dotColor = isDark ? Colors.blue.shade300 : Colors.blue.shade700;
@@ -4096,6 +4927,7 @@ class _BreakingNewsTimelineTile extends StatelessWidget {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800,
                                 color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                height: 1.0,
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -4108,6 +4940,11 @@ class _BreakingNewsTimelineTile extends StatelessWidget {
                               ),
                             ),
                             const Spacer(),
+                            _LandingUrgencyBadge(
+                              label: _landingNewsImportanceLabel(item.importance),
+                              severity: item.importance,
+                            ),
+                            const SizedBox(width: 6),
                             _LandingTinyBadge(
                               text: category,
                               foreground: isDark ? Colors.white : const Color(0xFF2563EB),
@@ -4138,6 +4975,20 @@ class _BreakingNewsTimelineTile extends StatelessWidget {
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
+                          ),
+                        ],
+                        if (item.tickers.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: item.tickers.take(2).map((ticker) {
+                              return _LandingTinyBadge(
+                                text: _landingFormatStockCode(ticker),
+                                foreground: isDark ? Colors.grey.shade100 : const Color(0xFF334155),
+                                background: isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
+                              );
+                            }).toList(),
                           ),
                         ],
                       ],
@@ -5176,6 +6027,12 @@ String _sentimentCaption(int temperature) {
   return '뉴스 분위기: 중립 흐름';
 }
 
+String _landingSentimentLabel(int temperature) {
+  if (temperature >= 71) return '탐욕';
+  if (temperature <= 30) return '불안';
+  return '중립';
+}
+
 String _landingSectorMoodLabel(TrendInsightSnapshot insight) {
   final sectorTemperatures = insight.keywords
       .where((item) =>
@@ -5323,6 +6180,132 @@ String _landingBriefingTextSafe(TrendInsightSnapshot insight) {
   }
 
   return lines.join('\n');
+}
+
+String _landingCoreIssueLine(TrendInsightSnapshot insight) {
+  final keyword = insight.keywords.isNotEmpty
+      ? _cleanLandingKeyword(insight.keywords.first.keyword)
+      : '';
+  final rising = insight.risingIssues.isNotEmpty
+      ? _cleanLandingKeyword(insight.risingIssues.first.keyword)
+      : '';
+
+  if (keyword.isEmpty && rising.isEmpty) {
+    return '오늘의 주요 이슈를 분석하고 있습니다. 새로 들어오는 뉴스를 기반으로 핵심 흐름을 정리합니다.';
+  }
+
+  if (keyword.isNotEmpty && rising.isNotEmpty) {
+    return '$keyword 관련 이슈와 $rising 흐름이 오늘 뉴스의 중심입니다.';
+  }
+
+  final base = keyword.isNotEmpty ? keyword : rising;
+  return '$base 관련 보도가 오늘 시장과 뉴스 흐름을 이끌고 있습니다.';
+}
+
+String _landingRisingIssueLine(TrendInsightSnapshot insight) {
+  final issue = insight.risingIssues.isNotEmpty ? insight.risingIssues.first : null;
+  if (issue == null || issue.keyword.trim().isEmpty) {
+    return '뚜렷한 상승 이슈는 아직 제한적입니다.';
+  }
+
+  final keyword = _cleanLandingKeyword(issue.keyword);
+  final count = issue.currentCount;
+  return '$keyword 언급이 빠르게 늘고 있습니다. ($count건)';
+}
+
+String _landingFallingIssueLine(TrendInsightSnapshot insight) {
+  final weakKeyword = insight.keywords
+      .where((item) => (item.sentimentTemperature ?? 50) <= 45)
+      .toList()
+    ..sort((a, b) {
+      final aTemp = a.sentimentTemperature ?? 50;
+      final bTemp = b.sentimentTemperature ?? 50;
+      return aTemp.compareTo(bTemp);
+    });
+
+  if (weakKeyword.isEmpty) {
+    return '하락 이슈는 아직 뚜렷하지 않습니다.';
+  }
+
+  final item = weakKeyword.first;
+  return '${_cleanLandingKeyword(item.keyword)} 관련 뉴스는 상대적으로 약한 흐름입니다.';
+}
+
+List<String> _landingMarketImpactLines(TrendInsightSnapshot insight) {
+  final lines = <String>[];
+  final temp = insight.sentiment.temperature;
+  final domestic = temp >= 66
+      ? '국내 증시 긍정'
+      : temp <= 40
+          ? '국내 증시 부정'
+          : '국내 증시 중립';
+  lines.add(domestic);
+
+  final topKeyword = insight.keywords.isNotEmpty
+      ? _cleanLandingKeyword(insight.keywords.first.keyword)
+      : '';
+  if (topKeyword.contains('반도체') || topKeyword.contains('HBM') || topKeyword.contains('AI')) {
+    lines.add('반도체 강세');
+  } else if (topKeyword.contains('비트코인') || topKeyword.contains('가상자산')) {
+    lines.add('가상자산 변동성 확대');
+  } else if (topKeyword.contains('환율') || topKeyword.contains('달러')) {
+    lines.add('환율 영향 확대');
+  } else {
+    lines.add('업종 혼조');
+  }
+
+  lines.add(temp >= 66
+      ? '환율 중립'
+      : temp <= 40
+          ? '환율 불안'
+          : '환율 관망');
+
+  return lines;
+}
+
+String _landingNewsImportanceLabel(int importance) {
+  if (importance >= 5) return '긴급';
+  if (importance >= 4) return '주요';
+  return '일반';
+}
+
+int _landingNewsPriorityRank(TrendItem item) {
+  final importance = item.importance;
+  if (importance >= 5) return 0;
+  if (importance >= 4) return 1;
+  return 2;
+}
+
+String _landingMarketStageLabel(_LandingMarketQuote quote) {
+  final updatedAt = quote.priceUpdatedAt;
+  if (updatedAt == null) return '시세 지연';
+  final age = DateTime.now().difference(updatedAt);
+  if (age.inMinutes > 30) return '시세 지연';
+
+  if (quote.group == 'fx' || quote.group == 'crypto') {
+    return '시간외';
+  }
+
+  final now = DateTime.now();
+  final weekday = now.weekday;
+  if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
+    return '휴장';
+  }
+
+  final minutes = now.hour * 60 + now.minute;
+  if (minutes < 8 * 60 + 30) return '개장 전';
+  if (minutes >= 9 * 60 && minutes < 15 * 60 + 30) return '장중';
+  if (minutes >= 15 * 60 + 30 && minutes < 18 * 60) return '시간외';
+  return '장 마감';
+}
+
+String _landingMarketStageDetail(_LandingMarketQuote quote) {
+  final updatedAt = quote.priceUpdatedAt;
+  if (updatedAt == null) return '시세 확인 중';
+  final age = DateTime.now().difference(updatedAt);
+  if (age.inMinutes > 30) return '30분 이상 지연';
+  if (age.inMinutes > 10) return '${age.inMinutes}분 지연';
+  return '${_landingFormatUpdatedAt(updatedAt)} 기준';
 }
 
 String _cleanLandingKeyword(String keyword) {
@@ -5550,6 +6533,7 @@ class _LandingMarketQuote {
   final double currentPrice;
   final double percentChange;
   final DateTime? priceUpdatedAt;
+  final List<double> chartData;
 
   const _LandingMarketQuote({
     required this.symbol,
@@ -5560,6 +6544,7 @@ class _LandingMarketQuote {
     required this.currentPrice,
     required this.percentChange,
     required this.priceUpdatedAt,
+    this.chartData = const [],
   });
 }
 
@@ -5779,36 +6764,55 @@ class _LandingMarketSummaryCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            formattedPrice,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 14.0,
-              fontWeight: FontWeight.w900,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(height: 3),
           Row(
             children: [
-              Icon(
-                up ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                size: 13,
-                color: accent,
-              ),
-              const SizedBox(width: 3),
-              Text(
-                _landingFormatPercent(quote.percentChange),
-                style: TextStyle(
-                  fontSize: 11.2,
-                  fontWeight: FontWeight.w800,
-                  color: accent,
+              Expanded(
+                child: Text(
+                  formattedPrice,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 18.0,
+                    fontWeight: FontWeight.w900,
+                    color: textColor,
+                  ),
                 ),
               ),
               const Spacer(),
+              Row(
+                children: [
+                  Icon(
+                    up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                    size: 13,
+                    color: accent,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    _landingFormatPercent(quote.percentChange),
+                    style: TextStyle(
+                      fontSize: 11.2,
+                      fontWeight: FontWeight.w800,
+                      color: accent,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
               Text(
-                '전일 대비',
+                _landingMarketStageLabel(quote),
+                style: TextStyle(
+                  fontSize: 10.0,
+                  fontWeight: FontWeight.w800,
+                  color: muted,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '· ${_landingMarketStageDetail(quote)}',
                 style: TextStyle(
                   fontSize: 10.0,
                   fontWeight: FontWeight.w700,
@@ -5830,7 +6834,7 @@ class _LandingMarketSummaryCard extends StatelessWidget {
           ] else if (updatedAt != null) ...[
             const SizedBox(height: 1),
             Text(
-              '시세 ${_landingFormatUpdatedAt(updatedAt)}',
+              '기준 ${_landingFormatUpdatedAt(updatedAt)}',
               style: TextStyle(
                 fontSize: 9.5,
                 fontWeight: FontWeight.w600,
@@ -5838,6 +6842,14 @@ class _LandingMarketSummaryCard extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 24,
+            child: _LandingSparkline(
+              values: quote.chartData,
+              color: accent,
+            ),
+          ),
         ],
       ),
     );
@@ -5860,6 +6872,8 @@ class _LandingExchangeRateRow extends StatelessWidget {
         : (isDark ? Colors.blue.shade300 : Colors.blue.shade600);
     final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
     final muted = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500;
+    final deltaValue = quote.currentPrice * quote.percentChange / 100;
+    final deltaLabel = '${deltaValue >= 0 ? '+' : ''}${_landingFormatNumber(deltaValue.abs(), decimals: 2)}원';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -5876,7 +6890,7 @@ class _LandingExchangeRateRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: textColor,
-                    fontSize: 12.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -5899,7 +6913,7 @@ class _LandingExchangeRateRow extends StatelessWidget {
               textAlign: TextAlign.right,
               style: TextStyle(
                 color: textColor,
-                fontSize: 13.2,
+                fontSize: 14.0,
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -5918,11 +6932,31 @@ class _LandingExchangeRateRow extends StatelessWidget {
                 _landingFormatPercent(quote.percentChange),
                 style: TextStyle(
                   color: accent,
-                  fontSize: 11.2,
+                  fontSize: 12,
                   fontWeight: FontWeight.w800,
                 ),
               ),
             ],
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '전일 대비 $deltaLabel',
+            style: TextStyle(
+              color: muted,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            quote.priceUpdatedAt == null
+                ? '기준 시각 --:--'
+                : '${_landingFormatUpdatedAt(quote.priceUpdatedAt)} 기준',
+            style: TextStyle(
+              color: muted,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
