@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:ui';
@@ -7,7 +7,7 @@ import '../models/trend_item.dart';
 import '../models/trend_insight.dart';
 import '../services/api_service.dart';
 import '../services/theme_controller.dart';
-import '../utils/news_grouping.dart';
+import '../theme/pulse_ui.dart';
 import '../widgets/app_drawer.dart';
 import 'landing_screen.dart';
 import 'fear_greed_page.dart';
@@ -75,6 +75,82 @@ String _timeAgo(String isoDate) {
   }
 }
 
+String _publisherLabel(String source) {
+  final value = source.trim();
+  if (value.isEmpty) return '언론사';
+
+  String slug = '';
+
+  final uri = Uri.tryParse(value);
+
+  if (uri != null && uri.host.isNotEmpty) {
+    final host = uri.host.replaceFirst(
+      RegExp(r'^www\.', caseSensitive: false),
+      '',
+    );
+
+    final parts = host.split('.');
+    if (parts.isNotEmpty) {
+      slug = parts.first.trim();
+    }
+  } else {
+    final cleaned = value
+        .replaceFirst(
+          RegExp(r'^https?://', caseSensitive: false),
+          '',
+        )
+        .replaceFirst(
+          RegExp(r'^www\.', caseSensitive: false),
+          '',
+        )
+        .split('/')
+        .first
+        .trim();
+
+    if (cleaned.isNotEmpty) {
+      slug = cleaned.contains('.') ? cleaned.split('.').first : cleaned;
+    }
+  }
+
+  if (slug.isEmpty) return '언론사';
+
+  const aliases = {
+    'fourfourtwo': '풋볼',
+    'ajunews': '아주경제',
+    'etoday': '이투데이',
+    'sisajournal': '시사저널',
+    'busan': '부산일보',
+    'mediapen': '미디어펜',
+    'newsj': '뉴스젤',
+    'pinpoinnews': '핀포인트뉴스',
+    'itoza': '이토즈',
+    'edaily': '이데일리',
+    'yna': '연합뉴스',
+    'mk': '매일경제',
+    'hankyung': '한국경제',
+    'sedaily': '서울경제',
+    'chosun': '조선일보',
+    'joongang': '중앙일보',
+    'donga': '동아일보',
+    'khan': '경향신문',
+    'huffingtonpost': '허프포스트',
+    'fnnews': '파이낸셜뉴스',
+    'heraldcorp': '헤럴드경제',
+    'bizwatch': '비즈워치',
+    'mt': '머니투데이',
+    'moneytoday': '머니투데이',
+    'newsis': '뉴시스',
+  };
+
+  return aliases[slug.toLowerCase()] ?? slug;
+}
+
+String _sourceDisplayName(TrendItem trend) {
+  final source = trend.source.trim();
+  if (source.isEmpty) return '언론사';
+  return _publisherLabel(source);
+}
+
 // ════════════════════════════════════════════════
 // HomeScreen
 // ════════════════════════════════════════════════
@@ -104,6 +180,7 @@ class _HomeScreenState extends State<HomeScreen>
   final TextEditingController _searchController = TextEditingController();
   final List<String> _recentSearches = [];
   bool _isFeaturedExpanded = true;
+  bool _isTrendInsightExpanded = false;
 
   /// 5분마다 각 _TrendList에 새로고침 신호를 보내는 notifier
   final ValueNotifier<DateTime> _refreshNotifier =
@@ -201,10 +278,13 @@ class _HomeScreenState extends State<HomeScreen>
       backgroundColor: Colors.transparent,
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        final surface = isDark ? const Color(0xFF111827) : const Color(0xFFF8FBFF);
-        final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+        final surface =
+            isDark ? const Color(0xFF111827) : const Color(0xFFF8FBFF);
+        final border =
+            isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
         final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
-        final secondaryText = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+        final secondaryText =
+            isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
 
         return DraggableScrollableSheet(
           initialChildSize: 0.82,
@@ -212,7 +292,8 @@ class _HomeScreenState extends State<HomeScreen>
           maxChildSize: 0.95,
           builder: (_, controller) {
             return ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
               child: ColoredBox(
                 color: surface,
                 child: SafeArea(
@@ -223,11 +304,14 @@ class _HomeScreenState extends State<HomeScreen>
                       anchor: anchor,
                     ),
                     builder: (context, snapshot) {
-                      final resolvedItems = snapshot.data ?? const <TrendItem>[];
+                      final resolvedItems =
+                          snapshot.data ?? const <TrendItem>[];
                       final orderedItems = resolvedItems.toList()
                         ..sort((a, b) {
-                          final aDate = _trendDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-                          final bDate = _trendDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+                          final aDate = _trendDate(a) ??
+                              DateTime.fromMillisecondsSinceEpoch(0);
+                          final bDate = _trendDate(b) ??
+                              DateTime.fromMillisecondsSinceEpoch(0);
                           return bDate.compareTo(aDate);
                         });
 
@@ -240,7 +324,9 @@ class _HomeScreenState extends State<HomeScreen>
                               width: 42,
                               height: 4,
                               decoration: BoxDecoration(
-                                color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                                color: isDark
+                                    ? Colors.grey.shade700
+                                    : Colors.grey.shade300,
                                 borderRadius: BorderRadius.circular(999),
                               ),
                             ),
@@ -255,10 +341,13 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                           ),
                           const SizedBox(height: 14),
-                          if (snapshot.connectionState == ConnectionState.waiting)
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 80),
-                              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                              child: Center(
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2)),
                             )
                           else if (orderedItems.isEmpty)
                             Padding(
@@ -275,7 +364,8 @@ class _HomeScreenState extends State<HomeScreen>
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _TrendCard(
-                                  key: ValueKey('cluster-${orderedItems[i].id}-$i'),
+                                  key: ValueKey(
+                                      'cluster-${orderedItems[i].id}-$i'),
                                   rank: i + 1,
                                   trend: orderedItems[i],
                                 ),
@@ -354,10 +444,13 @@ class _HomeScreenState extends State<HomeScreen>
       backgroundColor: Colors.transparent,
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        final surface = isDark ? const Color(0xFF111827) : const Color(0xFFF8FBFF);
-        final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+        final surface =
+            isDark ? const Color(0xFF111827) : const Color(0xFFF8FBFF);
+        final border =
+            isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
         final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
-        final secondaryText = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+        final secondaryText =
+            isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
 
         return DraggableScrollableSheet(
           initialChildSize: 0.82,
@@ -377,8 +470,10 @@ class _HomeScreenState extends State<HomeScreen>
                       final items = snapshot.data ?? const <TrendItem>[];
                       final orderedItems = items.toList()
                         ..sort((a, b) {
-                          final aDate = _trendDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-                          final bDate = _trendDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+                          final aDate = _trendDate(a) ??
+                              DateTime.fromMillisecondsSinceEpoch(0);
+                          final bDate = _trendDate(b) ??
+                              DateTime.fromMillisecondsSinceEpoch(0);
                           return bDate.compareTo(aDate);
                         });
                       final isLoading =
@@ -393,7 +488,9 @@ class _HomeScreenState extends State<HomeScreen>
                               width: 42,
                               height: 4,
                               decoration: BoxDecoration(
-                                color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                                color: isDark
+                                    ? Colors.grey.shade700
+                                    : Colors.grey.shade300,
                                 borderRadius: BorderRadius.circular(999),
                               ),
                             ),
@@ -431,7 +528,8 @@ class _HomeScreenState extends State<HomeScreen>
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _TrendCard(
-                                  key: ValueKey('keyword-${orderedItems[i].id}-$i'),
+                                  key: ValueKey(
+                                      'keyword-${orderedItems[i].id}-$i'),
                                   rank: i + 1,
                                   trend: orderedItems[i],
                                 ),
@@ -469,17 +567,20 @@ class _HomeScreenState extends State<HomeScreen>
         final rising = insight.risingIssues;
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final surface = isDark ? const Color(0xFF111827) : Colors.white;
-        final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+        final border =
+            isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
         final primaryText = Theme.of(context).colorScheme.onSurface;
-        final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
+        final secondaryText =
+            isDark ? Colors.grey.shade400 : Colors.grey.shade700;
         final topLine = topKeywords.isEmpty
             ? '오늘 새 이슈를 수집하고 있어요.'
             : '지금 ${topKeywords.take(3).map((e) => e.keyword).join(', ')} 이슈가 많이 언급되고 있어요.';
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-          child: SizedBox(
-            height: 360,
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: surface,
@@ -487,60 +588,147 @@ class _HomeScreenState extends State<HomeScreen>
                 border: Border.all(color: border),
                 boxShadow: [
                   BoxShadow(
-                    color: isDark ? Colors.black.withOpacity(0.22) : Colors.black.withOpacity(0.04),
+                    color: isDark
+                        ? Colors.black.withOpacity(0.22)
+                        : Colors.black.withOpacity(0.04),
                     blurRadius: 12,
                     offset: const Offset(0, 6),
                   ),
                 ],
               ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF172554) : const Color(0xFFEAF1FF),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.radar_rounded,
-                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            '오늘의 한 줄 트렌드',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                              color: primaryText,
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isCompact = constraints.maxWidth < 560;
+                        final actionRow = Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _isTrendInsightExpanded =
+                                      !_isTrendInsightExpanded;
+                                });
+                              },
+                              style: TextButton.styleFrom(
+                                minimumSize: Size.zero,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                foregroundColor: isDark
+                                    ? Colors.blue.shade200
+                                    : Colors.blue.shade700,
+                              ),
+                              child: Text(
+                                _isTrendInsightExpanded ? '접기' : '더보기',
+                                style: const TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w800),
+                              ),
                             ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: '새로고침',
-                          onPressed: () {
-                            setState(() {
-                              _insightFuture = _api.fetchTrendInsights();
-                            });
-                          },
-                          icon: Icon(
-                            Icons.refresh_rounded,
-                            size: 20,
-                            color: secondaryText,
-                          ),
-                        ),
-                      ],
+                            const SizedBox(width: 6),
+                            IconButton(
+                              tooltip: '새로고침',
+                              onPressed: () {
+                                setState(() {
+                                  _insightFuture = _api.fetchTrendInsights();
+                                });
+                              },
+                              icon: Icon(
+                                Icons.refresh_rounded,
+                                size: 20,
+                                color: secondaryText,
+                              ),
+                            ),
+                          ],
+                        );
+
+                        if (isCompact) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? const Color(0xFF172554)
+                                          : const Color(0xFFEAF1FF),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                      Icons.radar_rounded,
+                                      color: isDark
+                                          ? Colors.blue.shade200
+                                          : Colors.blue.shade700,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      '오늘의 한 줄 트렌드',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w900,
+                                        color: primaryText,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: actionRow,
+                              ),
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF172554)
+                                    : const Color(0xFFEAF1FF),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                Icons.radar_rounded,
+                                color: isDark
+                                    ? Colors.blue.shade200
+                                    : Colors.blue.shade700,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                '오늘의 한 줄 트렌드',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  color: primaryText,
+                                ),
+                              ),
+                            ),
+                            actionRow,
+                          ],
+                        );
+                      },
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Text(
                       topLine,
+                      maxLines: _isTrendInsightExpanded ? 4 : 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14,
                         height: 1.45,
@@ -548,55 +736,73 @@ class _HomeScreenState extends State<HomeScreen>
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 10),
+                    _SentimentTemperatureCard(sentiment: insight.sentiment),
+                    const SizedBox(height: 10),
                     _TrendSearchBar(
                       controller: _searchController,
                       onSubmitted: (_) => _submitSearch(),
                       onSearch: _submitSearch,
                     ),
-                    const SizedBox(height: 16),
-                    _InsightSectionTitle(
-                      icon: Icons.local_fire_department_rounded,
-                      title: '실시간 인기 키워드 TOP 10',
-                      trailing: '${topKeywords.length}개',
-                    ),
-                    const SizedBox(height: 10),
-                    if (topKeywords.isEmpty)
-                      const _InsightEmpty(message: '아직 집계된 키워드가 없습니다.')
-                    else
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final keyword in topKeywords)
-                            _KeywordChip(
-                              keyword: keyword,
-                              onTap: () => _openKeywordNews(keyword.keyword),
-                            ),
-                        ],
+                    if (_isTrendInsightExpanded) ...[
+                      const SizedBox(height: 12),
+                      _InsightSectionTitle(
+                        icon: Icons.local_fire_department_rounded,
+                        title: '실시간 인기 키워드 상위 10',
+                        trailing: '${topKeywords.length}개',
                       ),
-                    const SizedBox(height: 18),
-                    _SentimentTemperatureCard(sentiment: insight.sentiment),
-                    const SizedBox(height: 18),
-                    _InsightSectionTitle(
-                      icon: Icons.trending_up_rounded,
-                      title: '급상승 이슈 TOP 5',
-                      trailing: '최근 1시간',
-                    ),
-                    const SizedBox(height: 10),
-                    if (rising.isEmpty)
-                      const _InsightEmpty(message: '급상승 조건을 만족한 이슈가 없습니다.')
-                    else
-                      Column(
-                        children: [
-                          for (int i = 0; i < rising.length; i++)
-                            _RisingIssueTile(
-                              issue: rising[i],
-                              rank: i + 1,
-                              onTap: () => _openKeywordNews(rising[i].keyword),
-                            ),
-                        ],
+                      const SizedBox(height: 8),
+                      if (topKeywords.isEmpty)
+                        const _InsightEmpty(message: '아직 집계된 키워드가 없습니다.')
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final keyword in topKeywords)
+                              _KeywordChip(
+                                keyword: keyword,
+                                onTap: () => _openKeywordNews(keyword.keyword),
+                              ),
+                          ],
+                        ),
+                      const SizedBox(height: 12),
+                      _InsightSectionTitle(
+                        icon: Icons.trending_up_rounded,
+                        title: '급상승 이슈 상위 5',
+                        trailing: '최근 1시간',
                       ),
+                      const SizedBox(height: 8),
+                      if (rising.isEmpty)
+                        const _CompactEmptyRow(message: '급상승 조건을 만족한 이슈가 없습니다.')
+                      else
+                        Column(
+                          children: [
+                            for (int i = 0; i < rising.length; i++)
+                              _RisingIssueTile(
+                                issue: rising[i],
+                                rank: i + 1,
+                                onTap: () =>
+                                    _openKeywordNews(rising[i].keyword),
+                              ),
+                          ],
+                        ),
+                    ] else ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '더보기를 누르면 인기 키워드와 급상승 이슈를 확인할 수 있습니다.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -612,7 +818,8 @@ class _HomeScreenState extends State<HomeScreen>
     final surface = isDark ? const Color(0xFF111827) : Colors.white;
     final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
-    final secondaryText = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500;
+    final secondaryText =
+        isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
       child: DecoratedBox(
@@ -622,7 +829,9 @@ class _HomeScreenState extends State<HomeScreen>
           border: Border.all(color: border),
           boxShadow: [
             BoxShadow(
-              color: isDark ? Colors.black.withOpacity(0.22) : Colors.black.withOpacity(0.025),
+              color: isDark
+                  ? Colors.black.withOpacity(0.22)
+                  : Colors.black.withOpacity(0.025),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -638,13 +847,16 @@ class _HomeScreenState extends State<HomeScreen>
                   Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+                      color: isDark
+                          ? const Color(0xFF172554)
+                          : const Color(0xFFEEF4FF),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       Icons.search_rounded,
                       size: 17,
-                      color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                      color:
+                          isDark ? Colors.blue.shade200 : Colors.blue.shade700,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -669,6 +881,58 @@ class _HomeScreenState extends State<HomeScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildAllNewsHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
+    final secondaryText =
+        isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.view_list_rounded,
+              size: 17,
+              color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '전체 뉴스',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: primaryText,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '최신순으로 전체 기사를 이어서 확인합니다.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: secondaryText,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -730,7 +994,7 @@ class _HomeScreenState extends State<HomeScreen>
               const SizedBox(height: 16),
               _InsightSectionTitle(
                 icon: Icons.local_fire_department_rounded,
-                title: '실시간 인기 키워드 TOP 10',
+                title: '실시간 인기 키워드 상위 10',
                 trailing: '관련 뉴스 기준',
               ),
               const SizedBox(height: 10),
@@ -751,7 +1015,7 @@ class _HomeScreenState extends State<HomeScreen>
               const SizedBox(height: 18),
               _InsightSectionTitle(
                 icon: Icons.trending_up_rounded,
-                title: '급상승 이슈 TOP 5',
+                title: '급상승 이슈 상위 5',
                 trailing: '최근 1시간',
               ),
               const SizedBox(height: 10),
@@ -874,12 +1138,12 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _buildFeaturedNewsSection() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
       child: Container(
         decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF111827)
-            : const Color(0xFFF7FBFF),
+          color: Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF111827)
+              : const Color(0xFFF7FBFF),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: Theme.of(context).brightness == Brightness.dark
@@ -897,7 +1161,7 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           child: FutureBuilder<List<TrendItem>>(
             future: _featuredFuture,
             builder: (context, snapshot) {
@@ -923,15 +1187,17 @@ class _HomeScreenState extends State<HomeScreen>
                             Container(
                               padding: const EdgeInsets.all(7),
                               decoration: BoxDecoration(
-                              color: Theme.of(context).brightness == Brightness.dark
-                                  ? const Color(0xFF172554)
-                                  : const Color(0xFFDDE9FF),
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? const Color(0xFF172554)
+                                    : const Color(0xFFDDE9FF),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Icon(
                                 Icons.auto_awesome_rounded,
                                 size: 17,
-                                color: Theme.of(context).brightness == Brightness.dark
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
                                     ? Colors.blue.shade200
                                     : Colors.blue.shade700,
                               ),
@@ -939,11 +1205,12 @@ class _HomeScreenState extends State<HomeScreen>
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                '오늘의 TOP 뉴스',
+                                '오늘의 주요 뉴스',
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w800,
-                                  color: Theme.of(context).colorScheme.onSurface,
+                                  color:
+                                      Theme.of(context).colorScheme.onSurface,
                                 ),
                               ),
                             ),
@@ -953,7 +1220,8 @@ class _HomeScreenState extends State<HomeScreen>
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: Theme.of(context).brightness == Brightness.dark
+                                  color: Theme.of(context).brightness ==
+                                          Brightness.dark
                                       ? Colors.grey.shade400
                                       : Colors.blueGrey.shade700,
                                 ),
@@ -963,7 +1231,8 @@ class _HomeScreenState extends State<HomeScreen>
                               _isFeaturedExpanded
                                   ? Icons.expand_less_rounded
                                   : Icons.expand_more_rounded,
-                              color: Theme.of(context).brightness == Brightness.dark
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
                                   ? Colors.grey.shade400
                                   : Colors.blueGrey.shade600,
                             ),
@@ -990,35 +1259,55 @@ class _HomeScreenState extends State<HomeScreen>
                                           height: 96,
                                           child: Center(
                                             child: Text(
-                                              'No featured news right now.',
+                                              '아직 오늘의 주요 뉴스가 없습니다.',
                                               style: TextStyle(
                                                 fontSize: 12,
-                                                color: Theme.of(context).brightness == Brightness.dark
+                                                color: Theme.of(context)
+                                                            .brightness ==
+                                                        Brightness.dark
                                                     ? Colors.grey.shade400
                                                     : Colors.grey.shade500,
                                               ),
                                             ),
                                           ),
                                         )
-                                      : SizedBox(
-                                          height: 194,
-                                          child: ListView.separated(
-                                            scrollDirection: Axis.horizontal,
-                                            physics:
-                                                const BouncingScrollPhysics(),
-                                            itemCount: items.length,
-                                            separatorBuilder: (_, __) =>
-                                                const SizedBox(width: 12),
-                                            itemBuilder: (context, index) {
-                                              final trend = items[index];
-                                              return _MajorNewsCard(
-                                                trend: trend,
-                                                index: index,
-                                                onTap: () =>
-                                                    _openTrendDetail(trend),
-                                              );
-                                            },
-                                          ),
+                                      : LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            final cardWidth = items.length <= 1
+                                                ? constraints.maxWidth
+                                                : ((constraints.maxWidth -
+                                                            (12 *
+                                                                (items.length -
+                                                                    1))) /
+                                                        items.length)
+                                                    .clamp(212.0, 276.0)
+                                                    .toDouble();
+                                            return SizedBox(
+                                              height: 178,
+                                              child: ListView.separated(
+                                                scrollDirection:
+                                                    Axis.horizontal,
+                                                physics:
+                                                    const BouncingScrollPhysics(),
+                                                itemCount: items.length,
+                                                separatorBuilder: (_, __) =>
+                                                    const SizedBox(width: 12),
+                                                itemBuilder: (context, index) {
+                                                  final trend = items[index];
+                                                  return _MajorNewsCard(
+                                                    trend: trend,
+                                                    index: index,
+                                                    width: cardWidth,
+                                                    height: index == 0
+                                                        ? 184.0
+                                                        : 176.0,
+                                                    onTap: () =>
+                                                        _openTrendDetail(trend),
+                                                  );
+                                                },
+                                              ),
+                                            );
+                                          },
                                         )),
                             )
                           : const SizedBox.shrink(),
@@ -1036,9 +1325,15 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final pageBackground = isDark ? const Color(0xFF0B1220) : const Color(0xFFF8FAFC);
-    final headerBackground = isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC);
-    final headerBorder = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final pageBackground = PulseUi.page(context);
+    final headerBackground = PulseUi.surface(context);
+    final headerBorder = PulseUi.border(context);
+    // The news feed is a browsing surface, so it should use the available
+    // viewport width. Individual rows already provide their own safe padding.
+    final contentMaxWidth = viewportWidth;
+    final showHeaderTime = viewportWidth >= 460;
+    final showAnalysisStatus = viewportWidth >= 760;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -1053,167 +1348,213 @@ class _HomeScreenState extends State<HomeScreen>
       body: SafeArea(
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
-              decoration: BoxDecoration(
-                color: headerBackground,
-                border: Border(
-                  bottom: BorderSide(color: headerBorder),
-                ),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.menu_rounded,
-                      size: 24,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                    onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '실시간 뉴스',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0,
-                      color: isDark ? Colors.white : Colors.black87,
+            Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
+                  decoration: BoxDecoration(
+                    color: headerBackground,
+                    border: Border(
+                      bottom: BorderSide(color: headerBorder),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF111827) : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: isDark ? Colors.grey.shade800 : const Color(0xFFE2E8F0),
-                      ),
-                    ),
-                    child: Text(
-                      _headerTime,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade700,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: isDark ? '라이트 모드' : '다크 모드',
-                    onPressed: () => ThemeController.instance.toggleThemeMode(
-                      brightness: isDark ? Brightness.dark : Brightness.light,
-                    ),
-                    icon: Icon(
-                      isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                      color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: isDark ? Colors.grey.shade800 : const Color(0xFFDCE7FF),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF2563EB),
-                            shape: BoxShape.circle,
-                          ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          Icons.menu_rounded,
+                          size: 24,
+                          color: isDark ? Colors.white : Colors.black87,
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '최근 24시간 분석',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0,
+                        onPressed: () =>
+                            _scaffoldKey.currentState?.openDrawer(),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '실시간 뉴스',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      if (showHeaderTime) ...[
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF111827)
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.grey.shade800
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Text(
+                            _headerTime,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? Colors.grey.shade300
+                                  : Colors.blueGrey.shade700,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ],
-                    ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: isDark ? '라이트 모드' : '다크 모드',
+                        onPressed: () =>
+                            ThemeController.instance.toggleThemeMode(
+                          brightness:
+                              isDark ? Brightness.dark : Brightness.light,
+                        ),
+                        icon: Icon(
+                          isDark
+                              ? Icons.light_mode_rounded
+                              : Icons.dark_mode_rounded,
+                          color: isDark
+                              ? Colors.blue.shade200
+                              : Colors.blue.shade700,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      if (showAnalysisStatus) ...[
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF172554)
+                                : const Color(0xFFEEF4FF),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.grey.shade800
+                                  : const Color(0xFFDCE7FF),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF2563EB),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '최근 24시간 분석',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? Colors.blue.shade200
+                                      : Colors.blue.shade700,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-            Container(
-              color: headerBackground,
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
-              child: TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                indicatorSize: TabBarIndicatorSize.tab,
-                labelColor: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
-                unselectedLabelColor: isDark ? Colors.grey.shade400 : const Color(0xFF475569),
-                indicator: BoxDecoration(
-                  color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: isDark ? Colors.grey.shade800 : const Color(0xFFDCE7FF),
-                  ),
-                ),
-                indicatorPadding: EdgeInsets.zero,
-                labelPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                labelStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0,
-                ),
-                unselectedLabelStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0,
-                ),
-                dividerColor: isDark ? Colors.grey.shade800 : const Color(0xFFE2E8F0),
-                tabs: [
-                  for (final cat in kCategories)
-                    Tab(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Text(cat['label'] as String),
+            Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                child: Container(
+                  color: headerBackground,
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    labelColor:
+                        isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                    unselectedLabelColor:
+                        isDark ? Colors.grey.shade400 : const Color(0xFF475569),
+                    indicator: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF172554)
+                          : const Color(0xFFEAF1FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.grey.shade800
+                            : const Color(0xFFDCE7FF),
                       ),
                     ),
-                ],
+                    indicatorPadding: EdgeInsets.zero,
+                    labelPadding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    labelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0,
+                    ),
+                    unselectedLabelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0,
+                    ),
+                    dividerColor:
+                        isDark ? Colors.grey.shade800 : const Color(0xFFE2E8F0),
+                    tabs: [
+                      for (final cat in kCategories)
+                        Tab(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Text(cat['label'] as String),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  for (final cat in kCategories)
-                    _TrendList(
-                      key: ValueKey(cat['value']),
-                      category: cat['value'] as String,
-                      categoryLabel: cat['label'] as String,
-                      refreshNotifier: _refreshNotifier,
-                      headerBuilder: cat['value'] == ''
-                          ? () => [
-                                _buildNewsSearchHeader(),
-                                _buildFeaturedNewsSection(),
-                              ]
-                          : null,
-                    ),
-                ],
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      for (final cat in kCategories)
+                        _TrendList(
+                          key: ValueKey(cat['value']),
+                          category: cat['value'] as String,
+                          categoryLabel: cat['label'] as String,
+                          refreshNotifier: _refreshNotifier,
+                          headerBuilder: cat['value'] == ''
+                              ? () => [
+                                    _buildTrendInsightSection(),
+                                    _buildFeaturedNewsSection(),
+                                    _buildAllNewsHeader(),
+                                  ]
+                              : null,
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],
@@ -1253,9 +1594,11 @@ class _InsightSkeleton extends StatelessWidget {
     return Container(
       height: 186,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF111827) : Colors.white.withOpacity(0.92),
+        color:
+            isDark ? const Color(0xFF111827) : Colors.white.withOpacity(0.92),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: isDark ? const Color(0xFF1F2937) : Colors.blue.shade50),
+        border: Border.all(
+            color: isDark ? const Color(0xFF1F2937) : Colors.blue.shade50),
       ),
       child: const Center(
         child: CircularProgressIndicator(strokeWidth: 2),
@@ -1282,7 +1625,9 @@ class _InsightSectionTitle extends StatelessWidget {
     final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     return Row(
       children: [
-        Icon(icon, size: 17, color: isDark ? Colors.blue.shade200 : Colors.blue.shade700),
+        Icon(icon,
+            size: 17,
+            color: isDark ? Colors.blue.shade200 : Colors.blue.shade700),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
@@ -1344,7 +1689,9 @@ class _AiBriefingCard extends StatelessWidget {
           border: Border.all(color: border),
           boxShadow: [
             BoxShadow(
-              color: isDark ? Colors.black.withOpacity(0.28) : Colors.black.withOpacity(0.04),
+              color: isDark
+                  ? Colors.black.withOpacity(0.28)
+                  : Colors.black.withOpacity(0.04),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
@@ -1358,7 +1705,9 @@ class _AiBriefingCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(9),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+                    color: isDark
+                        ? const Color(0xFF172554)
+                        : const Color(0xFFEEF4FF),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(
@@ -1388,7 +1737,7 @@ class _AiBriefingCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'Updated $updatedAt',
+                      '마지막 업데이트 $updatedAt',
                       style: TextStyle(
                         color: mutedText,
                         fontSize: 12,
@@ -1425,10 +1774,17 @@ class _AiBriefingCard extends StatelessWidget {
                     ActionChip(
                       label: Text('#${keyword.keyword}'),
                       onPressed: () => onKeywordTap(keyword),
-                      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF3F7FF),
-                      side: BorderSide(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFDCE7FF)),
+                      backgroundColor: isDark
+                          ? const Color(0xFF0F172A)
+                          : const Color(0xFFF3F7FF),
+                      side: BorderSide(
+                          color: isDark
+                              ? const Color(0xFF1F2937)
+                              : const Color(0xFFDCE7FF)),
                       labelStyle: TextStyle(
-                        color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
+                        color: isDark
+                            ? const Color(0xFF93C5FD)
+                            : const Color(0xFF2563EB),
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1460,18 +1816,21 @@ class _TrendDashboardCard extends StatelessWidget {
     final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     final primaryText = Theme.of(context).colorScheme.onSurface;
     final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
-    final deltaColor = trendDelta >= 0 ? const Color(0xFF2563EB) : Colors.blueGrey;
+    final deltaColor =
+        trendDelta >= 0 ? const Color(0xFF2563EB) : Colors.blueGrey;
     final deltaText = trendDelta >= 0 ? '+$trendDelta' : '$trendDelta';
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: border),
         boxShadow: [
           BoxShadow(
-            color: isDark ? Colors.black.withOpacity(0.24) : Colors.black.withOpacity(0.03),
+            color: isDark
+                ? Colors.black.withOpacity(0.24)
+                : Colors.black.withOpacity(0.03),
             blurRadius: 12,
             offset: const Offset(0, 5),
           ),
@@ -1485,7 +1844,10 @@ class _TrendDashboardCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   '트렌드 대시보드',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: primaryText),
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: primaryText),
                 ),
               ),
               Container(
@@ -1533,7 +1895,7 @@ class _TrendDashboardCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           _SentimentRatioBar(sentiment: sentiment),
         ],
       ),
@@ -1564,7 +1926,7 @@ class _DashboardMetricCard extends StatelessWidget {
     final primaryText = Theme.of(context).colorScheme.onSurface;
     final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(16),
@@ -1574,11 +1936,11 @@ class _DashboardMetricCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 20, color: color),
-          const SizedBox(height: 10),
+          const SizedBox(height: 9),
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10.5,
               color: secondaryText,
               fontWeight: FontWeight.w700,
             ),
@@ -1588,7 +1950,7 @@ class _DashboardMetricCard extends StatelessWidget {
             text: TextSpan(
               text: value,
               style: TextStyle(
-                fontSize: 26,
+                fontSize: 24,
                 fontWeight: FontWeight.w900,
                 color: isDark ? Colors.white : color,
               ),
@@ -1596,7 +1958,7 @@ class _DashboardMetricCard extends StatelessWidget {
                 TextSpan(
                   text: suffix,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w800,
                     color: color.withOpacity(0.75),
                   ),
@@ -1631,7 +1993,7 @@ class _SearchDiscoverySection extends StatelessWidget {
     final surface = isDark ? const Color(0xFF111827) : Colors.white;
     final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(20),
@@ -1645,14 +2007,14 @@ class _SearchDiscoverySection extends StatelessWidget {
             onSubmitted: (_) => onSearch(),
             onSearch: onSearch,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _DiscoveryChipRow(
             title: '인기 검색어',
             chips: popularKeywords.map((item) => item.keyword).toList(),
             onTap: onKeywordTap,
           ),
           if (recentSearches.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             _DiscoveryChipRow(
               title: '최근 검색어',
               chips: recentSearches,
@@ -1689,22 +2051,26 @@ class _DiscoveryChipRow extends StatelessWidget {
         Text(
           title,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11.5,
             color: secondaryText,
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 7),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: 7,
+          runSpacing: 7,
           children: [
             for (final chip in chips)
               ActionChip(
                 label: Text(chip),
                 onPressed: () => onTap(chip),
-                backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                side: BorderSide(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0)),
+                backgroundColor:
+                    isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                side: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1F2937)
+                        : const Color(0xFFE2E8F0)),
                 labelStyle: TextStyle(
                   fontWeight: FontWeight.w700,
                   color: primaryText,
@@ -1753,9 +2119,8 @@ class _KeywordRankTile extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: isTop3
-                    ? const Color(0xFFDCE7FF)
-                    : const Color(0xFFE2E8F0),
+                color:
+                    isTop3 ? const Color(0xFFDCE7FF) : const Color(0xFFE2E8F0),
               ),
               boxShadow: [
                 BoxShadow(
@@ -1924,7 +2289,10 @@ class _CategoryHotCard extends StatelessWidget {
               const SizedBox(width: 7),
               Text(
                 category,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: primaryText),
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: primaryText),
               ),
             ],
           ),
@@ -2173,12 +2541,12 @@ class _TrendSearchBar extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: isDark ? Colors.blue.shade200 : Colors.blue.shade300),
+          borderSide: BorderSide(
+              color: isDark ? Colors.blue.shade200 : Colors.blue.shade300),
         ),
       ),
     );
   }
-
 }
 
 class _KeywordChip extends StatelessWidget {
@@ -2194,7 +2562,8 @@ class _KeywordChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surface = isDark ? const Color(0xFF0F172A) : const Color(0xFFEEF4FF);
-    final innerSurface = isDark ? const Color(0xFF111827) : Colors.white.withOpacity(0.8);
+    final innerSurface =
+        isDark ? const Color(0xFF111827) : Colors.white.withOpacity(0.8);
     final primary = isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB);
     const color = Color(0xFF2563EB);
 
@@ -2260,10 +2629,10 @@ class _SentimentTemperatureCard extends StatelessWidget {
             : Colors.blueGrey;
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(15),
         border: Border.all(color: color.withOpacity(0.16)),
       ),
       child: Column(
@@ -2271,13 +2640,13 @@ class _SentimentTemperatureCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.thermostat_rounded, size: 18, color: color),
+              Icon(Icons.thermostat_rounded, size: 17, color: color),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   '오늘 뉴스 감정온도',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w900,
                     color: primaryText,
                   ),
@@ -2286,40 +2655,57 @@ class _SentimentTemperatureCard extends StatelessWidget {
               Text(
                 '${sentiment.temperature}°',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 15.5,
                   fontWeight: FontWeight.w900,
                   color: color,
                 ),
               ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF111827)
+                      : Colors.white.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  sentiment.temperature >= 71
+                      ? '긍정'
+                      : sentiment.temperature <= 30
+                          ? '부정'
+                          : '중립',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
             child: LinearProgressIndicator(
               value: sentiment.temperature / 100,
-              minHeight: 8,
-              backgroundColor: isDark ? const Color(0xFF1F2937) : Colors.white.withOpacity(0.8),
+              minHeight: 5.5,
+              backgroundColor: isDark
+                  ? const Color(0xFF1F2937)
+                  : Colors.white.withOpacity(0.8),
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 5),
           Text(
             sentiment.summary,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 12,
-              height: 1.4,
+              fontSize: 11.5,
+              height: 1.35,
               color: secondaryText,
               fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '긍정 ${sentiment.positiveRatio}% · 중립 ${sentiment.neutralRatio}% · 부정 ${sentiment.negativeRatio}%',
-            style: TextStyle(
-              fontSize: 11,
-              color: secondaryText,
-              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -2366,7 +2752,9 @@ class _RisingIssueTile extends StatelessWidget {
               border: Border.all(color: border),
               boxShadow: [
                 BoxShadow(
-                  color: isDark ? Colors.black.withOpacity(0.20) : Colors.black.withOpacity(0.02),
+                  color: isDark
+                      ? Colors.black.withOpacity(0.20)
+                      : Colors.black.withOpacity(0.02),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -2440,6 +2828,50 @@ class _RisingIssueTile extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CompactEmptyRow extends StatelessWidget {
+  final String message;
+
+  const _CompactEmptyRow({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+    final background =
+        isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            size: 14,
+            color: textColor,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2529,27 +2961,35 @@ class _MajorNewsCard extends StatelessWidget {
   final TrendItem trend;
   final int index;
   final VoidCallback onTap;
+  final double? width;
+  final double? height;
 
   const _MajorNewsCard({
     required this.trend,
     required this.index,
     required this.onTap,
+    this.width,
+    this.height,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardSurface = isDark ? const Color(0xFF111827) : Colors.white;
-    final cardBorder = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final cardBorder =
+        isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     final titleText = Theme.of(context).colorScheme.onSurface;
     final bodyText = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade800;
     final mutedText = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade600;
     final chipBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFEEF4FF);
-    final chipBorder = isDark ? const Color(0xFF1F2937) : const Color(0xFFDCE7FF);
+    final chipBorder =
+        isDark ? const Color(0xFF1F2937) : const Color(0xFFDCE7FF);
     final timeAgo = _timeAgo(trend.published);
-    final chipLabel = trend.category.isEmpty ? 'General' : trend.category;
+    final chipLabel = trend.category.isEmpty ? '일반' : trend.category;
     final isTopStory = index == 0;
     final isFeatured = index == 0;
+    final cardWidth = width ?? (isFeatured ? 268.0 : 242.0);
+    final cardHeight = height ?? (isFeatured ? 188.0 : 176.0);
 
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: 1),
@@ -2572,8 +3012,8 @@ class _MajorNewsCard extends StatelessWidget {
           hoverColor: const Color(0xFF2563EB).withOpacity(0.04),
           splashColor: const Color(0xFF2563EB).withOpacity(0.08),
           child: Container(
-            width: isFeatured ? 268 : 242,
-            height: isFeatured ? 188 : 176,
+            width: cardWidth,
+            height: cardHeight,
             decoration: BoxDecoration(
               color: cardSurface,
               borderRadius: BorderRadius.circular(18),
@@ -2582,7 +3022,9 @@ class _MajorNewsCard extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: isDark ? Colors.black.withOpacity(0.24) : Colors.black.withOpacity(isFeatured ? 0.06 : 0.04),
+                  color: isDark
+                      ? Colors.black.withOpacity(0.24)
+                      : Colors.black.withOpacity(isFeatured ? 0.06 : 0.04),
                   blurRadius: isFeatured ? 16 : 12,
                   offset: const Offset(0, 6),
                 ),
@@ -2595,7 +3037,8 @@ class _MajorNewsCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      _CategoryBadge(category: chipLabel, color: const Color(0xFF2563EB)),
+                      _CategoryBadge(
+                          category: chipLabel, color: const Color(0xFF2563EB)),
                       const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -2604,17 +3047,23 @@ class _MajorNewsCard extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: isTopStory
-                              ? (isDark ? const Color(0xFF3F2D12) : const Color(0xFFFFF7E6))
-                              : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF5F7FB)),
+                              ? (isDark
+                                  ? const Color(0xFF3F2D12)
+                                  : const Color(0xFFFFF7E6))
+                              : (isDark
+                                  ? const Color(0xFF0F172A)
+                                  : const Color(0xFFF5F7FB)),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          isTopStory ? 'TOP' : 'NEWS',
+                          isTopStory ? '주요' : '뉴스',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
                             color: isTopStory
-                                ? (isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))
+                                ? (isDark
+                                    ? const Color(0xFFFBBF24)
+                                    : const Color(0xFFB45309))
                                 : mutedText,
                           ),
                         ),
@@ -2633,15 +3082,13 @@ class _MajorNewsCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 10),
+                  const Spacer(),
                   Row(
                     children: [
                       if (trend.importance >= 4)
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
+                              horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: chipBg,
                             borderRadius: BorderRadius.circular(999),
@@ -2651,32 +3098,37 @@ class _MajorNewsCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
-                              color: isDark ? Colors.blue.shade200 : const Color(0xFF2563EB),
+                              color: isDark
+                                  ? Colors.blue.shade200
+                                  : const Color(0xFF2563EB),
                             ),
                           ),
                         ),
                       if (trend.importance >= 4) const SizedBox(width: 8),
-                      const Spacer(),
+                      Expanded(
+                        child: Text(
+                          _sourceDisplayName(trend),
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: mutedText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       Text(
-                        trend.source,
+                        timeAgo.isEmpty ? '방금 전' : timeAgo,
                         style: TextStyle(
                           fontSize: 10.5,
-                          color: mutedText,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.blueGrey.shade500,
                           fontWeight: FontWeight.w600,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    timeAgo.isEmpty ? 'just now' : timeAgo,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500,
-                      fontWeight: FontWeight.w600,
-                    ),
                   ),
                 ],
               ),
@@ -2744,7 +3196,8 @@ class _AppDrawer extends StatelessWidget {
                       children: [
                         Container(
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF111827) : Colors.white,
+                            color:
+                                isDark ? const Color(0xFF111827) : Colors.white,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           padding: const EdgeInsets.all(12),
@@ -3212,13 +3665,11 @@ class _TrendListState extends State<_TrendList>
 
           final trend = displayTrends[trendIndex];
 
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _TrendCard(
-              key: ValueKey(trend.id),
-              rank: trendIndex + 1,
-              trend: trend,
-            ),
+          return _NewsListRow(
+            key: ValueKey(trend.id),
+            rank: trendIndex + 1,
+            trend: trend,
+            onTapOverride: null,
           );
         },
       ),
@@ -3286,10 +3737,13 @@ class _TrendCardState extends State<_TrendCard>
     final surface = isDark ? const Color(0xFF111827) : Colors.white;
     final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
-    final secondaryText = isDark ? Colors.grey.shade200 : Colors.blueGrey.shade500;
+    final secondaryText =
+        isDark ? Colors.grey.shade200 : Colors.blueGrey.shade500;
     final timeStr = _timeAgo(widget.trend.published);
     final isTop3 = widget.rank <= 3;
-    final accent = isTop3 ? const Color(0xFF2563EB) : (isDark ? Colors.grey.shade400 : Colors.blueGrey.shade400);
+    final accent = isTop3
+        ? const Color(0xFF2563EB)
+        : (isDark ? Colors.grey.shade400 : Colors.blueGrey.shade400);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -3312,14 +3766,17 @@ class _TrendCardState extends State<_TrendCard>
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   curve: Curves.easeOut,
-                  transform: Matrix4.translationValues(0, _isHovered ? -2 : 0, 0),
+                  transform:
+                      Matrix4.translationValues(0, _isHovered ? -2 : 0, 0),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
                     color: surface,
                     border: Border.all(color: border),
                     boxShadow: [
                       BoxShadow(
-                        color: isDark ? Colors.black.withOpacity(0.24) : Colors.black.withOpacity(isTop3 ? 0.05 : 0.03),
+                        color: isDark
+                            ? Colors.black.withOpacity(0.24)
+                            : Colors.black.withOpacity(isTop3 ? 0.05 : 0.03),
                         blurRadius: isTop3 ? 14 : 10,
                         offset: const Offset(0, 4),
                       ),
@@ -3335,8 +3792,12 @@ class _TrendCardState extends State<_TrendCard>
                           height: 32,
                           decoration: BoxDecoration(
                             color: isTop3
-                                ? (isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF))
-                                : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
+                                ? (isDark
+                                    ? const Color(0xFF172554)
+                                    : const Color(0xFFEEF4FF))
+                                : (isDark
+                                    ? const Color(0xFF0F172A)
+                                    : const Color(0xFFF8FAFC)),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Center(
@@ -3370,17 +3831,23 @@ class _TrendCardState extends State<_TrendCard>
                               Row(
                                 children: [
                                   _CategoryBadge(
-                                    category: widget.trend.category.isEmpty ? 'General' : widget.trend.category,
+                                    category: widget.trend.category.isEmpty
+                                        ? '일반'
+                                        : widget.trend.category,
                                     color: accent,
                                     isImportant: false,
                                   ),
                                   const SizedBox(width: 8),
                                   if (widget.trend.importance >= 4)
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
-                                        borderRadius: BorderRadius.circular(999),
+                                        color: isDark
+                                            ? const Color(0xFF172554)
+                                            : const Color(0xFFEEF4FF),
+                                        borderRadius:
+                                            BorderRadius.circular(999),
                                       ),
                                       child: const Text(
                                         '핵심',
@@ -3391,22 +3858,30 @@ class _TrendCardState extends State<_TrendCard>
                                         ),
                                       ),
                                     ),
-                                  if (widget.trend.importance >= 4) const SizedBox(width: 8),
+                                  if (widget.trend.importance >= 4)
+                                    const SizedBox(width: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: isTop3
-                                          ? (isDark ? const Color(0xFF3F2D12) : const Color(0xFFFFF7E6))
-                                          : (isDark ? const Color(0xFF111827) : const Color(0xFFF6F7F9)),
+                                          ? (isDark
+                                              ? const Color(0xFF3F2D12)
+                                              : const Color(0xFFFFF7E6))
+                                          : (isDark
+                                              ? const Color(0xFF111827)
+                                              : const Color(0xFFF6F7F9)),
                                       borderRadius: BorderRadius.circular(999),
                                     ),
                                     child: Text(
-                                      isTop3 ? 'TOP' : 'NEWS',
+                                      isTop3 ? '주요' : '뉴스',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w800,
                                         color: isTop3
-                                            ? (isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))
+                                            ? (isDark
+                                                ? const Color(0xFFFBBF24)
+                                                : const Color(0xFFB45309))
                                             : secondaryText,
                                       ),
                                     ),
@@ -3444,6 +3919,224 @@ class _TrendCardState extends State<_TrendCard>
   }
 }
 
+class _NewsListRow extends StatefulWidget {
+  final int rank;
+  final TrendItem trend;
+  final VoidCallback? onTapOverride;
+
+  const _NewsListRow({
+    super.key,
+    required this.rank,
+    required this.trend,
+    this.onTapOverride,
+  });
+
+  @override
+  State<_NewsListRow> createState() => _NewsListRowState();
+}
+
+class _NewsListRowState extends State<_NewsListRow> {
+  bool _isHovered = false;
+
+  void _showDetail(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      enableDrag: true,
+      builder: (_) => _DetailSheet(trend: widget.trend),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = ThemeController.instance.mode.value == ThemeMode.dark;
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final hoverSurface =
+        isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
+    final secondaryText =
+        isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+    final rankAccent = widget.rank <= 3
+        ? const Color(0xFF2563EB)
+        : (isDark ? Colors.grey.shade400 : Colors.blueGrey.shade400);
+    final publishedLabel = _timeAgo(widget.trend.published);
+    final publisher = _sourceDisplayName(widget.trend);
+    final chipLabel =
+        widget.trend.category.isEmpty ? '일반' : widget.trend.category;
+    final isTop = widget.rank <= 3;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTapOverride ?? () => _showDetail(context),
+          borderRadius: BorderRadius.circular(12),
+          hoverColor: const Color(0xFF2563EB).withOpacity(0.025),
+          splashColor: const Color(0xFF2563EB).withOpacity(0.06),
+          onHover: (hovering) {
+            setState(() => _isHovered = hovering);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            transform: Matrix4.translationValues(0, _isHovered ? -1 : 0, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: _isHovered ? hoverSurface : surface,
+              border: Border(
+                bottom: BorderSide(color: border),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 3,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: isTop
+                        ? rankAccent.withOpacity(0.7)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 32,
+                  child: Text(
+                    '${widget.rank}',
+                    style: TextStyle(
+                      color: rankAccent,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _CategoryBadge(
+                            category: chipLabel,
+                            color: rankAccent,
+                            isImportant: false,
+                          ),
+                          const SizedBox(width: 7),
+                          if (widget.trend.importance >= 4)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF172554)
+                                    : const Color(0xFFEEF4FF),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '핵심',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark
+                                      ? Colors.blue.shade200
+                                      : const Color(0xFF2563EB),
+                                ),
+                              ),
+                            ),
+                          if (widget.trend.importance >= 4)
+                            const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: isTop
+                                  ? (isDark
+                                      ? const Color(0xFF3F2D12)
+                                      : const Color(0xFFFFF7E6))
+                                  : (isDark
+                                      ? const Color(0xFF111827)
+                                      : const Color(0xFFF6F7F9)),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              isTop ? '주요' : '뉴스',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: isTop
+                                    ? (isDark
+                                        ? const Color(0xFFFBBF24)
+                                        : const Color(0xFFB45309))
+                                    : secondaryText,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            publishedLabel.isEmpty ? '방금 전' : publishedLabel,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: secondaryText,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.trend.koreanTitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.34,
+                          fontWeight: FontWeight.w700,
+                          color: primaryText,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              publisher,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: secondaryText,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 16,
+                            color: secondaryText,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CategoryBadge extends StatelessWidget {
   final String category;
   final Color color;
@@ -3457,14 +4150,16 @@ class _CategoryBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final background = isImportant
+        ? (isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF))
+        : (isDark ? const Color(0xFF1A2535) : const Color(0xFFF1F5F9));
+    final foreground = isImportant
+        ? (isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB))
+        : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF526174));
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+        color: background,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: isDark ? const Color(0xFF1E3A8A) : const Color(0xFFDCE7FF),
-          width: 1,
-        ),
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(
@@ -3476,7 +4171,7 @@ class _CategoryBadge extends StatelessWidget {
           style: TextStyle(
             fontSize: isImportant ? 11 : 10.5,
             fontWeight: FontWeight.bold,
-            color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
+            color: foreground,
           ),
         ),
       ),
@@ -3552,10 +4247,10 @@ class _DetailSheet extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          trend.source,
+                          _sourceDisplayName(trend),
                           style: TextStyle(
                             fontSize: 12,
-                          color: isDark ? Colors.white : subtleText,
+                            color: isDark ? Colors.white : subtleText,
                             fontWeight: FontWeight.w600,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -3587,10 +4282,14 @@ class _DetailSheet extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF172554) : const Color(0xFFEAF1FF),
+                      color: isDark
+                          ? const Color(0xFF172554)
+                          : const Color(0xFFEAF1FF),
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(
-                        color: isDark ? const Color(0xFF1E3A8A) : const Color(0xFFDDE9FF),
+                        color: isDark
+                            ? const Color(0xFF1E3A8A)
+                            : const Color(0xFFDDE9FF),
                       ),
                     ),
                     child: Text(
@@ -3598,14 +4297,18 @@ class _DetailSheet extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
+                        color: isDark
+                            ? const Color(0xFF93C5FD)
+                            : const Color(0xFF2563EB),
                       ),
                     ),
                   ),
                   const SizedBox(height: 18),
                   DecoratedBox(
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF111827) : const Color(0xFFFAFAFA),
+                      color: isDark
+                          ? const Color(0xFF111827)
+                          : const Color(0xFFFAFAFA),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: border),
                     ),
@@ -3614,7 +4317,7 @@ class _DetailSheet extends StatelessWidget {
                       child: Text(
                         trend.summaryKr.isNotEmpty
                             ? trend.summaryKr
-                            : 'Summary not available.',
+                            : '요약 정보가 없습니다.',
                         style: TextStyle(
                           fontSize: 15,
                           height: 1.7,
@@ -3632,7 +4335,7 @@ class _DetailSheet extends StatelessWidget {
                         onPressed: () => _openUrl(trend.link, context),
                         icon: const Icon(Icons.open_in_new, size: 18),
                         label: const Text(
-                          'Open article',
+                          '원문 보기',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
@@ -3675,16 +4378,21 @@ class _ErrorView extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryText = isDark ? Colors.white : Colors.black87;
-    final secondaryText = isDark ? Colors.grey.shade400 : const Color(0xFF9E9E9E);
+    final secondaryText =
+        isDark ? Colors.grey.shade400 : const Color(0xFF9E9E9E);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.cloud_off_rounded,
-              size: 64, color: isDark ? Colors.grey.shade600 : const Color(0xFFDDDDDD)),
+              size: 64,
+              color: isDark ? Colors.grey.shade600 : const Color(0xFFDDDDDD)),
           const SizedBox(height: 16),
           Text('백엔드 서버 연결 중...',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryText)),
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: primaryText)),
           const SizedBox(height: 8),
           Text('https://news-summarizer.bum2432.workers.dev',
               style: TextStyle(fontSize: 13, color: secondaryText)),
@@ -3717,15 +4425,17 @@ class _EmptyView extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryText = isDark ? Colors.white : Colors.black87;
-    final secondaryText = isDark ? Colors.grey.shade400 : const Color(0xFF9E9E9E);
+    final secondaryText =
+        isDark ? Colors.grey.shade400 : const Color(0xFF9E9E9E);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.newspaper, size: 60, color: isDark ? Colors.grey.shade600 : const Color(0xFFDDDDDD)),
+          Icon(Icons.newspaper,
+              size: 60,
+              color: isDark ? Colors.grey.shade600 : const Color(0xFFDDDDDD)),
           const SizedBox(height: 12),
-          Text('$label 뉴스가 없습니다',
-              style: TextStyle(color: secondaryText)),
+          Text('$label 뉴스가 없습니다', style: TextStyle(color: secondaryText)),
           const SizedBox(height: 16),
           TextButton.icon(
             onPressed: onRetry,

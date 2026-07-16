@@ -35,6 +35,7 @@ const ISSUE_TIMELINE_WINDOWS = [
 
 const VALID_CATEGORIES = ['경제', '세계', '사회', '정치', '생활/문화', 'IT/과학'];
 const MARKET_DATA_CACHE_TTL_MS = 45 * 1000;
+const SUPABASE_GET_CACHE_TTL_MS = 45 * 1000;
 const MARKET_DATA_CACHE = new Map();
 
 export default {
@@ -1972,6 +1973,25 @@ async function handleGetChartData(url, corsHeaders) {
 
 async function querySupabase(env, endpoint, method = 'GET', body = null, single = false) {
   const url = `${env.SUPABASE_URL}/rest/v1/${endpoint}`;
+  const isCacheableGet = method === 'GET' && !single;
+  const cacheKey = isCacheableGet
+    ? new Request(url, {
+        method: 'GET',
+      })
+    : null;
+
+  if (isCacheableGet) {
+    try {
+      const cached = await caches.default.match(cacheKey);
+      if (cached) {
+        const cachedJson = await cached.json();
+        return {
+          data: cachedJson.data,
+          error: cachedJson.error || null,
+        };
+      }
+    } catch (_) {}
+  }
 
   const headers = {
     'apikey': env.SUPABASE_ANON_KEY,
@@ -1998,15 +2018,32 @@ async function querySupabase(env, endpoint, method = 'GET', body = null, single 
 
   try {
     const response = await fetch(url, options);
+    const responseText = await safeReadText(response);
 
     if (!response.ok) {
-      const errorText = await safeReadText(response);
-
+      if (isCacheableGet) {
+        try {
+          const cachePayload = JSON.stringify({
+            data: null,
+            error: {
+              status: response.status,
+              message: responseText || response.statusText,
+            },
+          });
+          const cachedResponse = new Response(cachePayload, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': `public, max-age=15, stale-while-revalidate=30`,
+            },
+          });
+          await caches.default.put(cacheKey, cachedResponse);
+        } catch (_) {}
+      }
       return {
         data: null,
         error: {
           status: response.status,
-          message: errorText || response.statusText,
+          message: responseText || response.statusText,
         },
       };
     }
@@ -2015,8 +2052,31 @@ async function querySupabase(env, endpoint, method = 'GET', body = null, single 
       return { data: true, error: null };
     }
 
+    let parsed = null;
+    try {
+      parsed = responseText ? JSON.parse(responseText) : null;
+    } catch (_) {
+      parsed = null;
+    }
+    const result = {
+      data: parsed,
+      error: null,
+    };
+
+    if (isCacheableGet) {
+      try {
+        const cachedResponse = new Response(JSON.stringify(result), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': `public, max-age=${Math.floor(SUPABASE_GET_CACHE_TTL_MS / 1000)}, stale-while-revalidate=${Math.floor((SUPABASE_GET_CACHE_TTL_MS * 2) / 1000)}`,
+          },
+        });
+        await caches.default.put(cacheKey, cachedResponse);
+      } catch (_) {}
+    }
+
     return {
-      data: await response.json(),
+      data: parsed,
       error: null,
     };
   } catch (error) {

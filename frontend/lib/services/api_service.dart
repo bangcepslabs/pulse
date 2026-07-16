@@ -4,9 +4,27 @@ import '../models/trend_item.dart';
 import '../models/trend_insight.dart';
 
 /// API 통신 서비스
+class _CachedJsonEntry {
+  final Map<String, dynamic> data;
+  final DateTime expiresAt;
+
+  const _CachedJsonEntry({
+    required this.data,
+    required this.expiresAt,
+  });
+}
+
 class ApiService {
   // Cloudflare Workers 주소
   static const String baseUrl = 'https://news-summarizer.bum2432.workers.dev';
+  static const Duration _defaultCacheDuration = Duration(seconds: 30);
+  static final Map<String, _CachedJsonEntry> _jsonCache = {};
+  static final Map<String, Future<Map<String, dynamic>>> _pendingJson = {};
+
+  static void _pruneCache() {
+    final now = DateTime.now();
+    _jsonCache.removeWhere((_, entry) => entry.expiresAt.isBefore(now));
+  }
 
   /// 최신 트렌드 목록 가져오기
   Future<List<TrendItem>> fetchTrends(
@@ -57,15 +75,18 @@ class ApiService {
       period: period,
       category: category,
       limit: 10,
+      cacheDuration: const Duration(seconds: 45),
     );
     final risingFuture = fetchRisingIssues(
       period: '1h',
       category: category,
       limit: 5,
+      cacheDuration: const Duration(seconds: 45),
     );
     final sentimentFuture = fetchNewsSentiment(
       period: period,
       category: category,
+      cacheDuration: const Duration(seconds: 45),
     );
 
     final results = await Future.wait<dynamic>([
@@ -86,6 +107,7 @@ class ApiService {
     String category = '',
     int limit = 10,
     int minScore = 0,
+    Duration cacheDuration = _defaultCacheDuration,
   }) async {
     final uri = Uri.parse('$baseUrl/api/trend/timeline').replace(
       queryParameters: {
@@ -95,7 +117,7 @@ class ApiService {
         if (category.isNotEmpty) 'category': category,
       },
     );
-    final jsonData = await _getJson(uri);
+    final jsonData = await _getJson(uri, cacheDuration: cacheDuration);
     final items = jsonData['items'] as List<dynamic>? ?? const [];
 
     return items
@@ -107,6 +129,7 @@ class ApiService {
     required String issueId,
     String? keyword,
     List<int> newsIds = const [],
+    Duration cacheDuration = _defaultCacheDuration,
   }) async {
     final uri = Uri.parse('$baseUrl/api/trend/timeline/${Uri.encodeComponent(issueId)}/news').replace(
       queryParameters: {
@@ -114,7 +137,7 @@ class ApiService {
         if (newsIds.isNotEmpty) 'news_ids': newsIds.join(','),
       },
     );
-    final jsonData = await _getJson(uri);
+    final jsonData = await _getJson(uri, cacheDuration: cacheDuration);
     final items = jsonData['items'] as List<dynamic>? ?? const [];
 
     return items
@@ -126,6 +149,7 @@ class ApiService {
     String period = '24h',
     String category = '',
     int limit = 10,
+    Duration cacheDuration = _defaultCacheDuration,
   }) async {
     final uri = Uri.parse('$baseUrl/api/trends/keywords').replace(
       queryParameters: {
@@ -134,7 +158,7 @@ class ApiService {
         if (category.isNotEmpty) 'category': category,
       },
     );
-    final jsonData = await _getJson(uri);
+    final jsonData = await _getJson(uri, cacheDuration: cacheDuration);
     final items = jsonData['items'] as List<dynamic>? ?? const [];
 
     return items
@@ -146,6 +170,7 @@ class ApiService {
     String period = '1h',
     String category = '',
     int limit = 5,
+    Duration cacheDuration = _defaultCacheDuration,
   }) async {
     final uri = Uri.parse('$baseUrl/api/trends/rising').replace(
       queryParameters: {
@@ -154,7 +179,7 @@ class ApiService {
         if (category.isNotEmpty) 'category': category,
       },
     );
-    final jsonData = await _getJson(uri);
+    final jsonData = await _getJson(uri, cacheDuration: cacheDuration);
     final items = jsonData['items'] as List<dynamic>? ?? const [];
 
     return items
@@ -166,6 +191,7 @@ class ApiService {
     String period = '24h',
     String category = '',
     String keyword = '',
+    Duration cacheDuration = _defaultCacheDuration,
   }) async {
     final uri = Uri.parse('$baseUrl/api/trends/sentiment').replace(
       queryParameters: {
@@ -174,7 +200,7 @@ class ApiService {
         if (keyword.isNotEmpty) 'keyword': keyword,
       },
     );
-    final jsonData = await _getJson(uri);
+    final jsonData = await _getJson(uri, cacheDuration: cacheDuration);
 
     return NewsSentimentSummary.fromJson(jsonData);
   }
@@ -184,6 +210,7 @@ class ApiService {
     String period = '24h',
     String category = '',
     int limit = 20,
+    Duration cacheDuration = _defaultCacheDuration,
   }) async {
     final uri = Uri.parse('$baseUrl/api/news/by-keyword').replace(
       queryParameters: {
@@ -193,7 +220,7 @@ class ApiService {
         if (category.isNotEmpty) 'category': category,
       },
     );
-    final jsonData = await _getJson(uri);
+    final jsonData = await _getJson(uri, cacheDuration: cacheDuration);
     final items = jsonData['items'] as List<dynamic>? ?? const [];
 
     return KeywordNewsResult(
@@ -211,6 +238,7 @@ class ApiService {
     String period = '24h',
     String sort = 'latest',
     int limit = 20,
+    Duration cacheDuration = _defaultCacheDuration,
   }) async {
     final uri = Uri.parse('$baseUrl/api/news/search').replace(
       queryParameters: {
@@ -221,7 +249,7 @@ class ApiService {
         if (category.isNotEmpty) 'category': category,
       },
     );
-    final jsonData = await _getJson(uri);
+    final jsonData = await _getJson(uri, cacheDuration: cacheDuration);
     final items = jsonData['items'] as List<dynamic>? ?? const [];
 
     return items
@@ -269,7 +297,37 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> _getJson(Uri uri) async {
+  Future<Map<String, dynamic>> _getJson(
+    Uri uri, {
+    Duration cacheDuration = _defaultCacheDuration,
+  }) async {
+    _pruneCache();
+    final key = uri.toString();
+    final cached = _jsonCache[key];
+    if (cached != null && cached.expiresAt.isAfter(DateTime.now())) {
+      return cached.data;
+    }
+
+    final pending = _pendingJson[key];
+    if (pending != null) {
+      return pending;
+    }
+
+    final future = _fetchJson(uri).then((jsonData) {
+      _jsonCache[key] = _CachedJsonEntry(
+        data: jsonData,
+        expiresAt: DateTime.now().add(cacheDuration),
+      );
+      return jsonData;
+    }).whenComplete(() {
+      _pendingJson.remove(key);
+    });
+
+    _pendingJson[key] = future;
+    return future;
+  }
+
+  Future<Map<String, dynamic>> _fetchJson(Uri uri) async {
     final response = await http.get(
       uri,
       headers: {'Content-Type': 'application/json'},

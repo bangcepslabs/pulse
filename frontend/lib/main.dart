@@ -35,11 +35,11 @@ ThemeData _buildLightTheme() {
     useMaterial3: true,
     colorScheme: scheme,
     textTheme: Typography.material2021().black.apply(
-      bodyColor: scheme.onSurface,
-      displayColor: scheme.onSurface,
-    ),
-    scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-    canvasColor: const Color(0xFFF8FAFC),
+          bodyColor: scheme.onSurface,
+          displayColor: scheme.onSurface,
+        ),
+    scaffoldBackgroundColor: const Color(0xFFF5F7FA),
+    canvasColor: const Color(0xFFF5F7FA),
     iconTheme: const IconThemeData(color: Color(0xFF334155)),
     chipTheme: ChipThemeData(
       backgroundColor: const Color(0xFFF1F5F9),
@@ -68,26 +68,28 @@ ThemeData _buildLightTheme() {
       filled: true,
       fillColor: const Color(0xFFF8FAFC),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.2),
       ),
       hintStyle: const TextStyle(color: Color(0xFF64748B)),
     ),
     switchTheme: SwitchThemeData(
       thumbColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.selected)) return const Color(0xFF2563EB);
+        if (states.contains(MaterialState.selected))
+          return const Color(0xFF2563EB);
         return const Color(0xFF94A3B8);
       }),
       trackColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.selected)) return const Color(0xFFBFDBFE);
+        if (states.contains(MaterialState.selected))
+          return const Color(0xFFBFDBFE);
         return const Color(0xFFE2E8F0);
       }),
     ),
@@ -100,7 +102,7 @@ ThemeData _buildLightTheme() {
       color: Colors.white,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: Colors.white,
@@ -137,11 +139,11 @@ ThemeData _buildDarkTheme() {
     brightness: Brightness.dark,
     colorScheme: scheme,
     textTheme: Typography.material2021().white.apply(
-      bodyColor: scheme.onSurface,
-      displayColor: scheme.onSurface,
-    ),
-    scaffoldBackgroundColor: const Color(0xFF0B1220),
-    canvasColor: const Color(0xFF0B1220),
+          bodyColor: scheme.onSurface,
+          displayColor: scheme.onSurface,
+        ),
+    scaffoldBackgroundColor: const Color(0xFF08111F),
+    canvasColor: const Color(0xFF08111F),
     iconTheme: const IconThemeData(color: Color(0xFFCBD5E1)),
     chipTheme: ChipThemeData(
       backgroundColor: const Color(0xFF111827),
@@ -170,26 +172,28 @@ ThemeData _buildDarkTheme() {
       filled: true,
       fillColor: const Color(0xFF111827),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFF334155)),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFF334155)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFF60A5FA), width: 1.2),
       ),
       hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
     ),
     switchTheme: SwitchThemeData(
       thumbColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.selected)) return const Color(0xFF60A5FA);
+        if (states.contains(MaterialState.selected))
+          return const Color(0xFF60A5FA);
         return const Color(0xFF64748B);
       }),
       trackColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.selected)) return const Color(0xFF1E3A8A);
+        if (states.contains(MaterialState.selected))
+          return const Color(0xFF1E3A8A);
         return const Color(0xFF1F2937);
       }),
     ),
@@ -202,7 +206,7 @@ ThemeData _buildDarkTheme() {
       color: const Color(0xFF111827),
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: const Color(0xFF111827),
