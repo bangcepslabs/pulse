@@ -174,7 +174,7 @@ async function handleGetTrends(url, env, corsHeaders) {
   const sort = normalizeSort(url.searchParams.get('sort') || 'latest');
   const period = normalizePeriod(url.searchParams.get('period') || '');
 
-  const query = 'id,korean_title,summary_kr,importance,tickers,category,link,source,published,created_at,view_count';
+  const query = 'id,korean_title,summary_kr,importance,tickers,category,link,source,thumbnail_url,published,created_at,view_count';
   const filters = category ? `&category=eq.${encodeURIComponent(category)}` : '';
   const periodFilter = buildPeriodFilter(period);
   const order = buildTrendOrder(sort);
@@ -420,7 +420,7 @@ async function handleGetIssueTimelineNews(url, issueId, env, corsHeaders) {
     if (requestedIds.length > 0) {
       const { data: directTrends, error: directError } = await querySupabase(
         env,
-        `trends?select=id,korean_title,original_title,summary_kr,importance,tickers,category,link,source,published,created_at,view_count&id=in.(${requestedIds.join(',')})&order=published.desc,created_at.desc`
+        `trends?select=id,korean_title,original_title,summary_kr,importance,tickers,category,link,source,thumbnail_url,published,created_at,view_count&id=in.(${requestedIds.join(',')})&order=published.desc,created_at.desc`
       );
 
       if (directError) {
@@ -493,7 +493,7 @@ async function handleGetIssueTimelineNews(url, issueId, env, corsHeaders) {
 
   const { data: trends, error: trendsError } = await querySupabase(
     env,
-    `trends?select=id,korean_title,original_title,summary_kr,importance,tickers,category,link,source,published,created_at,view_count&id=in.(${newsIds})&order=published.desc,created_at.desc`
+    `trends?select=id,korean_title,original_title,summary_kr,importance,tickers,category,link,source,thumbnail_url,published,created_at,view_count&id=in.(${newsIds})&order=published.desc,created_at.desc`
   );
 
   if (trendsError) {
@@ -981,6 +981,7 @@ Return JSON only:
     tickers: normalizeTickers(analysis.tickers),
     category: finalCategory,
     link: article.link,
+    thumbnail_url: await fetchArticleThumbnailUrl(article.link),
     published: article.pubDate,
     source: article.source,
     created_at: new Date().toISOString(),
@@ -1039,6 +1040,56 @@ async function insertTrends(trends, env) {
   }
 
   return inserted;
+}
+
+async function fetchArticleThumbnailUrl(articleUrl) {
+  const url = String(articleUrl || '').trim();
+  if (!url) return '';
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; PulseBot/1.0; +https://pulse.app)',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (!response.ok) {
+      return '';
+    }
+
+    const html = await response.text();
+    return extractThumbnailUrlFromHtml(html, url);
+  } catch (_) {
+    return '';
+  }
+}
+
+function extractThumbnailUrlFromHtml(html, baseUrl) {
+  const source = String(html || '');
+  if (!source) return '';
+
+  const patterns = [
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    const candidate = match?.[1]?.trim();
+    if (!candidate) continue;
+
+    try {
+      return new URL(candidate, baseUrl).toString();
+    } catch (_) {
+      continue;
+    }
+  }
+
+  return '';
 }
 
 async function cleanupOldTrends(env, days) {
@@ -1806,9 +1857,9 @@ async function handleGetMarketData(url, corsHeaders) {
           throw new Error('No quote data returned');
         }
 
-        const currentPrice = meta.regularMarketPrice;
+        const currentPrice = Number(meta.regularMarketPrice);
 
-        let previousClose = meta.previousClose || meta.regularMarketPreviousClose;
+        let previousClose = meta.regularMarketPreviousClose || meta.previousClose || meta.chartPreviousClose;
 
         if (!previousClose) {
           const closes = (indicators.close || []).filter(v => v !== null && v !== undefined);
@@ -1817,20 +1868,19 @@ async function handleGetMarketData(url, corsHeaders) {
             ? closes[closes.length - 2]
             : meta.chartPreviousClose;
         }
+        previousClose = Number(previousClose);
 
-        const intradayWindow = interval !== '1d' || range === '1d';
-        if (intradayWindow) {
-          const intradayPrices = (indicators.close || [])
-            .filter(v => v !== null && v !== undefined);
+        const yahooPercentChange = Number(
+          meta.regularMarketChangePercent ??
+          meta.postMarketChangePercent ??
+          meta.preMarketChangePercent
+        );
 
-          if (intradayPrices.length > 1) {
-            previousClose = intradayPrices[0];
-          }
-        }
-
-        const percentChange = previousClose
-          ? ((currentPrice - previousClose) / previousClose) * 100
-          : 0;
+        const percentChange = Number.isFinite(yahooPercentChange)
+          ? yahooPercentChange
+          : (Number.isFinite(currentPrice) && Number.isFinite(previousClose) && previousClose !== 0)
+              ? ((currentPrice - previousClose) / previousClose) * 100
+              : 0;
 
         const priceUpdatedAt = meta.regularMarketTime
           ? new Date(meta.regularMarketTime * 1000).toISOString()
@@ -1846,6 +1896,7 @@ async function handleGetMarketData(url, corsHeaders) {
           symbol,
           currentPrice,
           percentChange,
+          previousClose: Number.isFinite(previousClose) ? previousClose : null,
           priceUpdatedAt,
           chartData,
         };
@@ -2271,7 +2322,7 @@ async function getRecentTrends(env, hours, category = '', limit = 500) {
     `created_at=gte.${since}`,
     category ? `category=eq.${encodeURIComponent(category)}` : '',
   ].filter(Boolean).join('&');
-  const endpoint = `trends?select=id,korean_title,original_title,summary_kr,importance,tickers,category,link,source,published,created_at,view_count&${filters}&order=published.desc,created_at.desc&limit=${limit}`;
+  const endpoint = `trends?select=id,korean_title,original_title,summary_kr,importance,tickers,category,link,source,thumbnail_url,published,created_at,view_count&${filters}&order=published.desc,created_at.desc&limit=${limit}`;
   const { data, error } = await querySupabase(env, endpoint);
 
   if (error) {
@@ -2646,6 +2697,7 @@ function formatNewsItem(row) {
     publishedAt: row.published || row.created_at || '',
     importance: row.importance || 3,
     link: row.link || '',
+    thumbnailUrl: row.thumbnail_url || '',
     sentiment: temperature >= 71 ? 'positive' : temperature <= 30 ? 'negative' : 'neutral',
     sentimentScore: temperature,
   };

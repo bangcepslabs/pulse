@@ -8,6 +8,7 @@ class TrendItem {
   final String category;
   final String link;
   final String source;
+  final String thumbnailUrl;
   final String published; // 기사 원본 출간 시간 (사용자에게 표시용)
   final String createdAt; // DB 삽입 시간 (관리용)
   final int viewCount;
@@ -21,6 +22,7 @@ class TrendItem {
     required this.category,
     required this.link,
     required this.source,
+    required this.thumbnailUrl,
     required this.published,
     required this.createdAt,
     this.viewCount = 0,
@@ -68,6 +70,7 @@ class TrendItem {
       category: json['category'] as String? ?? '일반',
       link: json['link'] as String? ?? '',
       source: json['source'] as String? ?? 'Unknown',
+      thumbnailUrl: json['thumbnail_url'] as String? ?? '',
       published: json['published'] as String? ?? json['created_at'] as String? ?? '', // 출간 시간 우선
       createdAt: json['created_at'] as String? ?? '',
       viewCount: (json['view_count'] as int?) ?? 0,
@@ -85,6 +88,7 @@ class TrendItem {
       'category': category,
       'link': link,
       'source': source,
+      'thumbnail_url': thumbnailUrl,
       'created_at': createdAt,
       'view_count': viewCount,
     };

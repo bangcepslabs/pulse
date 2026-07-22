@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'tradingview_detail_page.dart'; // 상세 페이지 import
 
 class MiniChartCard extends StatelessWidget {
@@ -11,6 +12,7 @@ class MiniChartCard extends StatelessWidget {
   final double percentChange; 
   final List<double> chartData; 
   final String prefix; 
+  final String? externalUrl;
 
   const MiniChartCard({
     Key? key,
@@ -21,7 +23,22 @@ class MiniChartCard extends StatelessWidget {
     required this.percentChange,
     required this.chartData,
     this.prefix = '', 
+    this.externalUrl,
   }) : super(key: key);
+
+  Future<void> _openExternalUrl(BuildContext context) async {
+    final raw = externalUrl?.trim() ?? '';
+    if (raw.isEmpty) return;
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return;
+
+    final opened = await launchUrl(uri, webOnlyWindowName: '_blank');
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('링크를 열 수 없습니다.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,6 +116,26 @@ class MiniChartCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text('$prefix${formatter.format(currentPrice)}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black87)),
             Text('${isUp ? '+' : ''}${percentChange.toStringAsFixed(2)}%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: chartColor)),
+            if ((externalUrl ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => _openExternalUrl(context),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                  label: const Text(
+                    '실시간 시세 보기',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF2563EB),
+                    padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    minimumSize: Size.zero,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

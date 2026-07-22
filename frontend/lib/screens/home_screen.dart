@@ -2565,13 +2565,17 @@ class _KeywordChip extends StatelessWidget {
     final innerSurface =
         isDark ? const Color(0xFF111827) : Colors.white.withOpacity(0.8);
     final primary = isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB);
-    const color = Color(0xFF2563EB);
+    final color = isDark ? const Color(0xFFBFDBFE) : const Color(0xFF2563EB);
+    final border = isDark ? const Color(0xFF334155) : const Color(0xFFDCE7FF);
 
     return Material(
       color: surface,
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(999),
+        side: BorderSide(color: border, width: 1),
+      ),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
         onTap: onTap,
         hoverColor: const Color(0xFF2563EB).withOpacity(0.05),
         splashColor: const Color(0xFF2563EB).withOpacity(0.08),
@@ -2594,6 +2598,10 @@ class _KeywordChip extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: innerSurface,
                   borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color:
+                        isDark ? const Color(0xFF475569) : Colors.transparent,
+                  ),
                 ),
                 child: Text(
                   '${keyword.newsCount}',
@@ -3952,6 +3960,7 @@ class _NewsListRowState extends State<_NewsListRow> {
   @override
   Widget build(BuildContext context) {
     final isDark = ThemeController.instance.mode.value == ThemeMode.dark;
+    final isCompact = MediaQuery.sizeOf(context).width < 560;
     final surface = isDark ? const Color(0xFF111827) : Colors.white;
     final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     final hoverSurface =
@@ -3969,7 +3978,7 @@ class _NewsListRowState extends State<_NewsListRow> {
     final isTop = widget.rank <= 3;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: isCompact ? 10 : 16),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -3984,7 +3993,10 @@ class _NewsListRowState extends State<_NewsListRow> {
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
             transform: Matrix4.translationValues(0, _isHovered ? -1 : 0, 0),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: EdgeInsets.symmetric(
+              horizontal: isCompact ? 10 : 14,
+              vertical: isCompact ? 11 : 12,
+            ),
             decoration: BoxDecoration(
               color: _isHovered ? hoverSurface : surface,
               border: Border(
@@ -3994,28 +4006,34 @@ class _NewsListRowState extends State<_NewsListRow> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 3,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: isTop
-                        ? rankAccent.withOpacity(0.7)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-                const SizedBox(width: 10),
                 SizedBox(
-                  width: 32,
-                  child: Text(
-                    '${widget.rank}',
-                    style: TextStyle(
-                      color: rankAccent,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
+                  width: isCompact ? 24 : 28,
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: Container(
+                      width: isCompact ? 22 : 24,
+                      height: isCompact ? 22 : 24,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isTop
+                            ? (isDark
+                                ? const Color(0xFF172554)
+                                : const Color(0xFFEEF4FF))
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${widget.rank}',
+                        style: TextStyle(
+                          color: rankAccent,
+                          fontSize: isCompact ? 11 : 12,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     ),
                   ),
                 ),
+                SizedBox(width: isCompact ? 6 : 9),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -4278,6 +4296,53 @@ class _DetailSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  if (trend.thumbnailUrl.trim().isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: Image.network(
+                          trend.thumbnailUrl.trim(),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: isDark
+                                ? const Color(0xFF111827)
+                                : const Color(0xFFF8FAFC),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              Icons.broken_image_outlined,
+                              color: isDark
+                                  ? Colors.grey.shade500
+                                  : Colors.blueGrey.shade300,
+                              size: 26,
+                            ),
+                          ),
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return Container(
+                              color: isDark
+                                  ? const Color(0xFF111827)
+                                  : const Color(0xFFF8FAFC),
+                              alignment: Alignment.center,
+                              child: SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: const Color(0xFF2563EB),
+                                  value: progress.expectedTotalBytes == null
+                                      ? null
+                                      : progress.cumulativeBytesLoaded /
+                                          progress.expectedTotalBytes!,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),

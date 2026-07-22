@@ -259,38 +259,96 @@ class _DrawerMenuItem extends StatelessWidget {
     final inactiveBg = isDark ? const Color(0xFF111827) : Colors.blue.shade50;
     final activeText = isDark ? Colors.white : Colors.black87;
     final inactiveText = isDark ? Colors.grey.shade300 : Colors.black87;
-
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: current ? activeBg : inactiveBg,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          icon,
-          color: current
-              ? (isDark ? const Color(0xFF93C5FD) : Colors.blue)
-              : (isDark ? Colors.grey.shade400 : Colors.blue),
-          size: 24,
+    return Material(
+      color: current ? activeBg : (isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC)),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: current ? activeBg : inactiveBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  icon,
+                  color: current
+                      ? (isDark ? const Color(0xFF93C5FD) : Colors.blue)
+                      : (isDark ? Colors.grey.shade400 : Colors.blue),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w700,
+                              color: current ? activeText : inactiveText,
+                            ),
+                          ),
+                        ),
+                        if (current) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF172554)
+                                  : const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '현재',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: isDark
+                                    ? Colors.blue.shade100
+                                    : const Color(0xFF2563EB),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: isDark ? Colors.grey.shade500 : Colors.blueGrey.shade300,
+              ),
+            ],
+          ),
         ),
       ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: current ? activeText : inactiveText,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(
-          fontSize: 12,
-          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-        ),
-      ),
-      onTap: onTap,
     );
   }
 }

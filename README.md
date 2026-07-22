@@ -198,6 +198,7 @@ CREATE TABLE trends (
     tickers TEXT,
     category TEXT,
     link TEXT,
+    thumbnail_url TEXT,
     published TIMESTAMPTZ,        -- 기사 출간 시간
     source TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),  -- DB 삽입 시간

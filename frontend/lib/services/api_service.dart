@@ -360,6 +360,7 @@ class ApiService {
       'category': json['category'],
       'link': json['link'],
       'source': json['source'],
+      'thumbnail_url': json['thumbnailUrl'] ?? json['thumbnail_url'],
       'published': json['publishedAt'],
       'created_at': json['publishedAt'],
       'view_count': 0,

@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS trends (
     tickers TEXT,
     category TEXT,
     link TEXT,
+    thumbnail_url TEXT,
     published TEXT,
     source TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
