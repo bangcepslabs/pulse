@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/theme_controller.dart';
 import '../theme/pulse_ui.dart';
 import '../utils/news_grouping.dart';
+import '../widgets/network_thumbnail.dart';
 import 'home_screen.dart';
 import 'fear_greed_page.dart';
 import './market_page.dart';
@@ -42,6 +43,33 @@ String _landingClockLabel(DateTime? dateTime) {
   final hour = dateTime.hour.toString().padLeft(2, '0');
   final minute = dateTime.minute.toString().padLeft(2, '0');
   return '$hour:$minute';
+}
+
+Widget _landingThumbnailFallback(bool isDark) {
+  return Container(
+    color: isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
+    alignment: Alignment.center,
+    child: Icon(
+      Icons.image_not_supported_outlined,
+      color: isDark ? Colors.grey.shade500 : Colors.blueGrey.shade300,
+      size: 22,
+    ),
+  );
+}
+
+Widget _landingThumbnailLoading(bool isDark) {
+  return Container(
+    color: isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
+    alignment: Alignment.center,
+    child: const SizedBox(
+      width: 20,
+      height: 20,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: Color(0xFF2563EB),
+      ),
+    ),
+  );
 }
 
 String _landingRelativeTimeLabel(DateTime? dateTime) {
@@ -2482,6 +2510,10 @@ class _LandingScreenState extends State<LandingScreen>
                           DateTime.fromMillisecondsSinceEpoch(0);
                       return bDate.compareTo(aDate);
                     });
+                  final countLabel = snapshot.connectionState ==
+                          ConnectionState.waiting
+                      ? '불러오는 중'
+                      : '${orderedItems.length}건';
 
                   return DefaultTextStyle.merge(
                     style: TextStyle(
@@ -2492,37 +2524,75 @@ class _LandingScreenState extends State<LandingScreen>
                       slivers: [
                         SliverToBoxAdapter(
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
-                            child: Row(
+                            padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Container(
-                                  width: 38,
-                                  height: 4,
-                                  margin: const EdgeInsets.only(right: 12),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? Colors.grey.shade700
-                                        : Colors.grey.shade300,
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    title,
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w900,
-                                      color:
-                                          isDark ? Colors.white : primaryText,
+                                Center(
+                                  child: Container(
+                                    width: 42,
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.grey.shade700
+                                          : Colors.grey.shade300,
+                                      borderRadius: BorderRadius.circular(999),
                                     ),
                                   ),
                                 ),
-                                IconButton(
-                                  tooltip: '닫기',
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  icon: Icon(
-                                    Icons.close_rounded,
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? const Color(0xFF172554)
+                                            : const Color(0xFFEEF4FF),
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        countLabel,
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? Colors.blue.shade100
+                                              : const Color(0xFF2563EB),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    IconButton(
+                                      tooltip: '닫기',
+                                      onPressed: () =>
+                                          Navigator.of(context).pop(),
+                                      icon: Icon(
+                                        Icons.close_rounded,
+                                        color: secondaryText,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w900,
+                                    color:
+                                        isDark ? Colors.white : primaryText,
+                                    height: 1.28,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '관련 기사들을 최신순으로 모아봤습니다.',
+                                  style: TextStyle(
                                     color: secondaryText,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
@@ -2838,6 +2908,10 @@ class _LandingScreenState extends State<LandingScreen>
                 builder: (context, snapshot) {
                   final items = snapshot.data ?? const <TrendItem>[];
                   final clusters = groupSimilarNews(items, maxClusters: 20);
+                  final countLabel = snapshot.connectionState ==
+                          ConnectionState.waiting
+                      ? '불러오는 중'
+                      : '${clusters.length}개 묶음';
 
                   return DefaultTextStyle.merge(
                     style: TextStyle(
@@ -2848,37 +2922,75 @@ class _LandingScreenState extends State<LandingScreen>
                       slivers: [
                         SliverToBoxAdapter(
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
-                            child: Row(
+                            padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Container(
-                                  width: 38,
-                                  height: 4,
-                                  margin: const EdgeInsets.only(right: 12),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? Colors.grey.shade700
-                                        : Colors.grey.shade300,
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    title,
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w900,
-                                      color:
-                                          isDark ? Colors.white : primaryText,
+                                Center(
+                                  child: Container(
+                                    width: 42,
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.grey.shade700
+                                          : Colors.grey.shade300,
+                                      borderRadius: BorderRadius.circular(999),
                                     ),
                                   ),
                                 ),
-                                IconButton(
-                                  tooltip: '닫기',
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  icon: Icon(
-                                    Icons.close_rounded,
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? const Color(0xFF172554)
+                                            : const Color(0xFFEEF4FF),
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        countLabel,
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? Colors.blue.shade100
+                                              : const Color(0xFF2563EB),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    IconButton(
+                                      tooltip: '닫기',
+                                      onPressed: () =>
+                                          Navigator.of(context).pop(),
+                                      icon: Icon(
+                                        Icons.close_rounded,
+                                        color: secondaryText,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w900,
+                                    color:
+                                        isDark ? Colors.white : primaryText,
+                                    height: 1.28,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '관련 뉴스 묶음을 빠르게 훑어볼 수 있도록 정리했습니다.',
+                                  style: TextStyle(
                                     color: secondaryText,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
@@ -5752,6 +5864,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isCompact = MediaQuery.sizeOf(context).width < 640;
     final item = widget.cluster.representative;
     final hasLink = item.link.trim().isNotEmpty;
     final source = item.source.trim().isEmpty ? 'News' : item.source.trim();
@@ -5759,6 +5872,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
         item.category.trim().isEmpty ? 'General' : item.category.trim();
     final timeLabel = _landingCompactTime(
         item.published.isNotEmpty ? item.published : item.createdAt);
+    final thumbnailUrl = item.thumbnailUrl.trim();
     final extraCount = widget.cluster.articleCount - 1;
 
     return MouseRegion(
@@ -5782,7 +5896,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
             hoverColor: const Color(0xFF2563EB).withOpacity(0.03),
             splashColor: const Color(0xFF2563EB).withOpacity(0.05),
             child: Container(
-              padding: const EdgeInsets.all(18),
+              padding: EdgeInsets.all(isCompact ? 14 : 18),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
@@ -5806,168 +5920,193 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                 ],
                 color: isDark ? const Color(0xFF111827) : Colors.white,
               ),
-              child: Column(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF172554)
-                              : const Color(0xFFEEF4FF),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Center(
-                          child: Text(
-                            source.isNotEmpty ? source[0].toUpperCase() : 'N',
-                            style: const TextStyle(
-                              color: Color(0xFF2563EB),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
+                  if (thumbnailUrl.isNotEmpty) ...[
+                    SizedBox(
+                      width: isCompact ? 72 : 88,
+                      child: NetworkThumbnail(
+                        imageUrl: thumbnailUrl,
+                        fit: BoxFit.cover,
+                        aspectRatio: 1,
+                        borderRadius: BorderRadius.circular(16),
+                        collapseOnError: true,
+                        errorWidget: _landingThumbnailFallback(isDark),
+                        loadingWidget: _landingThumbnailLoading(isDark),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          source,
-                          maxLines: 1,
+                    ),
+                    SizedBox(width: isCompact ? 10 : 14),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF172554)
+                                    : const Color(0xFFEEF4FF),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  source.isNotEmpty
+                                      ? source[0].toUpperCase()
+                                      : 'N',
+                                  style: const TextStyle(
+                                    color: Color(0xFF2563EB),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                source,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white
+                                      : Colors.blueGrey.shade700,
+                                  fontSize: isCompact ? 10.5 : 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF1F2937)
+                                    : const Color(0xFFF3F4F6),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                category,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.grey.shade100
+                                      : Colors.blueGrey.shade600,
+                                  fontSize: isCompact ? 9.5 : 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              timeLabel,
+                              style: TextStyle(
+                                color: isDark
+                                    ? Colors.grey.shade100
+                                    : Colors.blueGrey.shade500,
+                                fontSize: isCompact ? 9.5 : 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          item.koreanTitle,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: isDark
-                                ? Colors.white
-                                : Colors.blueGrey.shade700,
-                            fontSize: 11,
+                            color:
+                                isDark ? Colors.white : const Color(0xFF0F172A),
+                            fontSize: isCompact ? 14 : 15,
+                            height: 1.28,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF1F2937)
-                              : const Color(0xFFF3F4F6),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          category,
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.grey.shade100
-                                : Colors.blueGrey.shade600,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                        if (item.summaryKr.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            item.summaryKr.trim(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.grey.shade200
+                                  : Colors.blueGrey.shade600,
+                              fontSize: isCompact ? 13 : 14,
+                              height: 1.42,
+                              fontWeight: FontWeight.w400,
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        timeLabel,
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.grey.shade100
-                              : Colors.blueGrey.shade500,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    item.koreanTitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isDark ? Colors.white : const Color(0xFF0F172A),
-                      fontSize: 15,
-                      height: 1.28,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (item.summaryKr.trim().isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      item.summaryKr.trim(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isDark
-                            ? Colors.grey.shade200
-                            : Colors.blueGrey.shade600,
-                        fontSize: 14,
-                        height: 1.42,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF172554)
-                              : const Color(0xFFEEF4FF),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          extraCount > 0
-                              ? '묶음 ${widget.cluster.articleCount}건'
-                              : '단일 기사',
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.blue.shade200
-                                : Colors.blue.shade700,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF111827)
-                              : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          '언론사 ${widget.cluster.sourceCount}곳',
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.grey.shade200
-                                : Colors.blueGrey.shade600,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      if (extraCount > 0) ...[
-                        const Spacer(),
-                        Text(
-                          '외 $extraCount건',
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.grey.shade100
-                                : Colors.blueGrey.shade500,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF172554)
+                                    : const Color(0xFFEEF4FF),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                extraCount > 0
+                                    ? '묶음 ${widget.cluster.articleCount}건'
+                                    : '단일 기사',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.blue.shade200
+                                      : Colors.blue.shade700,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF111827)
+                                    : const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '언론사 ${widget.cluster.sourceCount}곳',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.grey.shade200
+                                      : Colors.blueGrey.shade600,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            if (extraCount > 0) ...[
+                              const Spacer(),
+                              Text(
+                                '외 $extraCount건',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.grey.shade100
+                                      : Colors.blueGrey.shade500,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -5995,6 +6134,7 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isCompact = MediaQuery.sizeOf(context).width < 640;
     final item = widget.item;
     final hasLink = item.link.trim().isNotEmpty;
     final source = item.source.trim().isEmpty ? 'News' : item.source.trim();
@@ -6002,6 +6142,7 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
         item.category.trim().isEmpty ? 'General' : item.category.trim();
     final timeLabel = _landingCompactTime(
         item.published.isNotEmpty ? item.published : item.createdAt);
+    final thumbnailUrl = item.thumbnailUrl.trim();
 
     return MouseRegion(
       cursor: hasLink ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -6024,7 +6165,7 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
             hoverColor: const Color(0xFF2563EB).withOpacity(0.03),
             splashColor: const Color(0xFF2563EB).withOpacity(0.05),
             child: Container(
-              padding: const EdgeInsets.all(18),
+              padding: EdgeInsets.all(isCompact ? 14 : 18),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
@@ -6048,188 +6189,213 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                 ],
                 color: isDark ? const Color(0xFF111827) : Colors.white,
               ),
-              child: Column(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF172554)
-                              : const Color(0xFFEEF4FF),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Center(
-                          child: Text(
-                            source.isNotEmpty ? source[0].toUpperCase() : 'N',
-                            style: const TextStyle(
-                              color: Color(0xFF2563EB),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          source,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.grey.shade200
-                                : Colors.blueGrey.shade700,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF1F2937)
-                              : const Color(0xFFF3F4F6),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          category,
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.grey.shade300
-                                : Colors.blueGrey.shade600,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        timeLabel,
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.grey.shade100
-                              : Colors.blueGrey.shade500,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    item.koreanTitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isDark ? Colors.white : const Color(0xFF0F172A),
-                      fontSize: 15,
-                      height: 1.28,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (item.summaryKr.trim().isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      item.summaryKr.trim(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isDark
-                            ? Colors.grey.shade100
-                            : Colors.blueGrey.shade600,
-                        fontSize: 14,
-                        height: 1.42,
-                        fontWeight: FontWeight.w400,
+                  if (thumbnailUrl.isNotEmpty) ...[
+                    SizedBox(
+                      width: isCompact ? 72 : 88,
+                      child: NetworkThumbnail(
+                        imageUrl: thumbnailUrl,
+                        fit: BoxFit.cover,
+                        aspectRatio: 1,
+                        borderRadius: BorderRadius.circular(16),
+                        collapseOnError: true,
+                        errorWidget: _landingThumbnailFallback(isDark),
+                        loadingWidget: _landingThumbnailLoading(isDark),
                       ),
                     ),
+                    SizedBox(width: isCompact ? 10 : 14),
                   ],
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEEF4FF),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Icon(
-                              Icons.auto_graph_rounded,
-                              size: 13,
-                              color: Colors.blue.shade700,
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF172554)
+                                    : const Color(0xFFEEF4FF),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  source.isNotEmpty
+                                      ? source[0].toUpperCase()
+                                      : 'N',
+                                  style: const TextStyle(
+                                    color: Color(0xFF2563EB),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                source,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.grey.shade200
+                                      : Colors.blueGrey.shade700,
+                                  fontSize: isCompact ? 10.5 : 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF1F2937)
+                                    : const Color(0xFFF3F4F6),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                category,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.grey.shade300
+                                      : Colors.blueGrey.shade600,
+                                  fontSize: isCompact ? 9.5 : 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
                             Text(
-                              '중요도 ${item.importance}',
+                              timeLabel,
                               style: TextStyle(
-                                color: Colors.blue.shade700,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
+                                color: isDark
+                                    ? Colors.grey.shade100
+                                    : Colors.blueGrey.shade500,
+                                fontSize: isCompact ? 9.5 : 10,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      if (hasLink) ...[
-                        const Spacer(),
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 170),
-                          curve: Curves.easeOut,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                        const SizedBox(height: 8),
+                        Text(
+                          item.koreanTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color:
+                                isDark ? Colors.white : const Color(0xFF0F172A),
+                            fontSize: isCompact ? 14 : 15,
+                            height: 1.28,
+                            fontWeight: FontWeight.w700,
                           ),
-                          decoration: BoxDecoration(
-                            color: _isHovered
-                                ? const Color(0xFFEEF4FF)
-                                : const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: _isHovered
-                                  ? const Color(0xFFD8E5FF)
-                                  : const Color(0xFFE2E8F0),
+                        ),
+                        if (item.summaryKr.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            item.summaryKr.trim(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.grey.shade100
+                                  : Colors.blueGrey.shade600,
+                              fontSize: isCompact ? 13 : 14,
+                              height: 1.42,
+                              fontWeight: FontWeight.w400,
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.open_in_new_rounded,
-                                size: 13,
-                                color: _isHovered
-                                    ? const Color(0xFF2563EB)
-                                    : Colors.blueGrey.shade500,
+                        ],
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
                               ),
-                              const SizedBox(width: 3),
-                              Text(
-                                '원문 보기',
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF4FF),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.auto_graph_rounded,
+                                    size: 13,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '중요도 ${item.importance}',
+                                    style: TextStyle(
+                                      color: Colors.blue.shade700,
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (hasLink) ...[
+                              const Spacer(),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 170),
+                                curve: Curves.easeOut,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
                                   color: _isHovered
-                                      ? const Color(0xFF2563EB)
-                                      : Colors.blueGrey.shade600,
+                                      ? const Color(0xFFEEF4FF)
+                                      : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: _isHovered
+                                        ? const Color(0xFFD8E5FF)
+                                        : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.open_in_new_rounded,
+                                      size: 13,
+                                      color: _isHovered
+                                          ? const Color(0xFF2563EB)
+                                          : Colors.blueGrey.shade500,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      '원문 보기',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: _isHovered
+                                            ? const Color(0xFF2563EB)
+                                            : Colors.blueGrey.shade600,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
-                          ),
+                          ],
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ],
               ),

@@ -4232,12 +4232,15 @@ class _DetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isCompact = MediaQuery.sizeOf(context).width < 560;
     final surface = isDark ? const Color(0xFF0B1220) : Colors.white;
     final border = isDark ? const Color(0xFF243041) : const Color(0xFFE2E8F0);
     final primaryText = isDark ? Colors.white : const Color(0xFF0F172A);
     final secondaryText = isDark ? Colors.grey.shade100 : Colors.grey.shade600;
     final subtleText = isDark ? Colors.grey.shade100 : Colors.grey.shade500;
     final catColor = _catColor(trend.category);
+    final publishedLabel =
+        trend.published.trim().isEmpty ? '' : _timeAgo(trend.published);
 
     return GestureDetector(
       onTap: () => Navigator.pop(context), // 바깥 영역 클릭 시 닫기
@@ -4254,7 +4257,12 @@ class _DetailSheet extends StatelessWidget {
               top: false,
               child: ListView(
                 controller: ctrl,
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+                padding: EdgeInsets.fromLTRB(
+                  isCompact ? 16 : 20,
+                  12,
+                  isCompact ? 16 : 20,
+                  32,
+                ),
                 children: [
                   Center(
                     child: Container(
@@ -4268,6 +4276,68 @@ class _DetailSheet extends StatelessWidget {
                     ),
                   ),
                   Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF172554)
+                              : const Color(0xFFEEF4FF),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.auto_awesome_rounded,
+                              size: 13,
+                              color: isDark
+                                  ? Colors.blue.shade100
+                                  : const Color(0xFF2563EB),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              '실시간 뉴스 브리핑',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: isDark
+                                    ? Colors.blue.shade100
+                                    : const Color(0xFF2563EB),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      if (publishedLabel.isNotEmpty)
+                        Text(
+                          publishedLabel,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: subtleText,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      IconButton(
+                        tooltip: '닫기',
+                        onPressed: () => Navigator.pop(context),
+                        visualDensity: VisualDensity.compact,
+                        splashRadius: 18,
+                        icon: Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: subtleText,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       DecoratedBox(
                         decoration: BoxDecoration(
@@ -4287,40 +4357,36 @@ class _DetailSheet extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _sourceDisplayName(trend),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark ? Colors.white : subtleText,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
                       Text(
-                        _timeAgo(trend.published),
+                        _sourceDisplayName(trend),
                         style: TextStyle(
                           fontSize: 12,
-                          color: isDark ? Colors.grey.shade100 : subtleText,
+                          color: isDark ? Colors.white : subtleText,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                      if (trend.published.trim().isNotEmpty)
+                        Text(
+                          _timeAgo(trend.published),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.grey.shade100 : subtleText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 14),
                   Text(
                     trend.koreanTitle,
                     style: TextStyle(
-                      fontSize: 21,
+                      fontSize: isCompact ? 20 : 22,
                       fontWeight: FontWeight.w800,
-                      height: 1.4,
+                      height: 1.34,
                       color: primaryText,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   if (trend.thumbnailUrl.trim().isNotEmpty) ...[
                     NetworkThumbnail(
                       imageUrl: trend.thumbnailUrl.trim(),
@@ -4358,32 +4424,6 @@ class _DetailSheet extends StatelessWidget {
                     ),
                     const SizedBox(height: 14),
                   ],
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF172554)
-                          : const Color(0xFFEAF1FF),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: isDark
-                            ? const Color(0xFF1E3A8A)
-                            : const Color(0xFFDDE9FF),
-                      ),
-                    ),
-                    child: Text(
-                      trend.importance >= 4 ? '핵심 이슈' : '일반 이슈',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: isDark
-                            ? const Color(0xFF93C5FD)
-                            : const Color(0xFF2563EB),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
                   DecoratedBox(
                     decoration: BoxDecoration(
                       color: isDark
@@ -4394,18 +4434,85 @@ class _DetailSheet extends StatelessWidget {
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Text(
-                        trend.summaryKr.isNotEmpty
-                            ? trend.summaryKr
-                            : '요약 정보가 없습니다.',
-                        style: TextStyle(
-                          fontSize: 15,
-                          height: 1.7,
-                          color: isDark ? Colors.grey.shade100 : secondaryText,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '핵심 요약',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: subtleText,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            trend.summaryKr.isNotEmpty
+                                ? trend.summaryKr
+                                : '요약 정보가 없습니다.',
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.7,
+                              color:
+                                  isDark ? Colors.grey.shade100 : secondaryText,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF172554)
+                              : const Color(0xFFEAF1FF),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: isDark
+                                ? const Color(0xFF1E3A8A)
+                                : const Color(0xFFDDE9FF),
+                          ),
+                        ),
+                        child: Text(
+                          trend.importance >= 4 ? '핵심 이슈' : '일반 이슈',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: isDark
+                                ? const Color(0xFF93C5FD)
+                                : const Color(0xFF2563EB),
+                          ),
+                        ),
+                      ),
+                      if (trend.category.trim().isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF111827)
+                                : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: border),
+                          ),
+                          child: Text(
+                            '${trend.category} 카테고리',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: secondaryText,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 24),
                   if (trend.link.isNotEmpty)
@@ -4425,6 +4532,9 @@ class _DetailSheet extends StatelessWidget {
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           backgroundColor: const Color(0xFF2563EB),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
                       ),
                     ),
