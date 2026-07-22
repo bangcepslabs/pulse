@@ -117,3 +117,9 @@ create table if not exists keyword_aliases (
 
 create unique index if not exists idx_keyword_aliases_alias
   on keyword_aliases (normalized_alias);
+
+alter table if exists trends
+add column if not exists thumbnail_url text;
+
+create index if not exists idx_trends_thumbnail_url
+  on trends (thumbnail_url);
