@@ -37,6 +37,13 @@ const VALID_CATEGORIES = ['경제', '세계', '사회', '정치', '생활/문화
 const MARKET_DATA_CACHE_TTL_MS = 45 * 1000;
 const SUPABASE_GET_CACHE_TTL_MS = 45 * 1000;
 const MARKET_DATA_CACHE = new Map();
+const SECURITY_RESPONSE_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'X-Robots-Tag': 'noindex, nofollow',
+  'Permissions-Policy': 'geolocation=(), microphone=(), camera=()',
+};
 
 export default {
   async fetch(request, env) {
@@ -129,12 +136,15 @@ export default {
       }
 
       if (path === '/api/debug/latest' && request.method === 'GET') {
+        if (!isDebugEndpointEnabled(env)) {
+          return jsonResponse({ error: 'Not found' }, corsHeaders, 404);
+        }
         const { data } = await querySupabase(
           env,
           'trends?select=id,korean_title,category,importance,created_at&order=id.desc&limit=5'
         );
 
-        return jsonResponse({ latest_by_id: data || [] }, corsHeaders);
+        return jsonResponse({ latest_by_id: data || [] }, { ...corsHeaders, 'Cache-Control': 'no-store' });
       }
 
       return jsonResponse({ error: 'Not found' }, corsHeaders, 404);
@@ -2149,9 +2159,14 @@ function jsonResponse(data, headers = {}, status = 200) {
     status,
     headers: {
       'Content-Type': 'application/json',
+      ...SECURITY_RESPONSE_HEADERS,
       ...headers,
     },
   });
+}
+
+function isDebugEndpointEnabled(env) {
+  return String(env?.ENABLE_DEBUG_ENDPOINT || '').toLowerCase() === 'true';
 }
 
 function decodeHTMLEntities(text) {

@@ -76,12 +76,11 @@ export default {
 
       // 긴급 디버그: 최신 데이터 확인
       if (path === '/api/debug/latest' && request.method === 'GET') {
+        if (!isDebugEndpointEnabled(env)) {
+          return jsonResponse({ error: 'Not found' }, corsHeaders, 404);
+        }
         const { data } = await querySupabase(env, 'trends?select=id,korean_title,created_at,category&order=id.desc&limit=5');
-        return jsonResponse({ 
-          latest_by_id: data,
-          supabase_url: env.SUPABASE_URL,
-          supabase_key_length: env.SUPABASE_ANON_KEY?.length
-        }, corsHeaders);
+        return jsonResponse({ latest_by_id: data }, { ...corsHeaders, 'Cache-Control': 'no-store' });
       }
 
       return jsonResponse({ error: 'Not found' }, corsHeaders, 404);
@@ -745,8 +744,20 @@ async function querySupabase(env, endpoint, method = 'GET', body = null, single 
 function jsonResponse(data, headers = {}, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+      'X-Robots-Tag': 'noindex, nofollow',
+      'Permissions-Policy': 'geolocation=(), microphone=(), camera=()',
+      ...headers,
+    },
   });
+}
+
+function isDebugEndpointEnabled(env) {
+  return String(env?.ENABLE_DEBUG_ENDPOINT || '').toLowerCase() === 'true';
 }
 
 function extractTag(xml, tagName) {
