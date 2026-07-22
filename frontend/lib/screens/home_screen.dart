@@ -1,5 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:ui';
@@ -10,29 +9,30 @@ import '../services/api_service.dart';
 import '../services/theme_controller.dart';
 import '../theme/pulse_ui.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/network_thumbnail.dart';
 import 'landing_screen.dart';
 import 'fear_greed_page.dart';
 import 'package:pulse/screens/market_page.dart';
 
-// ?? 遺꾩빞蹂????ㅼ젙 ??????????????????????????????
+// ── 분야별 탭 설정 ──────────────────────────────
 const List<Map<String, dynamic>> kCategories = [
-  {'label': '?꾩껜', 'value': '', 'icon': Icons.dashboard_rounded},
-  {'label': '寃쎌젣', 'value': '寃쎌젣', 'icon': Icons.trending_up_rounded},
-  {'label': '?멸퀎', 'value': '?멸퀎', 'icon': Icons.public_rounded},
-  {'label': '?ы쉶', 'value': '?ы쉶', 'icon': Icons.people_rounded},
-  {'label': '?뺤튂', 'value': '?뺤튂', 'icon': Icons.account_balance_rounded},
-  {'label': '?앺솢/臾명솕', 'value': '?앺솢/臾명솕', 'icon': Icons.library_books_rounded},
-  {'label': 'IT/怨쇳븰', 'value': 'IT/怨쇳븰', 'icon': Icons.computer_rounded},
+  {'label': '전체', 'value': '', 'icon': Icons.dashboard_rounded},
+  {'label': '경제', 'value': '경제', 'icon': Icons.trending_up_rounded},
+  {'label': '세계', 'value': '세계', 'icon': Icons.public_rounded},
+  {'label': '사회', 'value': '사회', 'icon': Icons.people_rounded},
+  {'label': '정치', 'value': '정치', 'icon': Icons.account_balance_rounded},
+  {'label': '생활/문화', 'value': '생활/문화', 'icon': Icons.library_books_rounded},
+  {'label': 'IT/과학', 'value': 'IT/과학', 'icon': Icons.computer_rounded},
 ];
 
-// ?? 移댄뀒怨좊━ ?됱긽 ??????????????????????????????
+// ── 카테고리 색상 ──────────────────────────────
 const Map<String, Color> kCategoryColors = {
-  '寃쎌젣': Color(0xFF2563EB),
-  '?멸퀎': Color(0xFF2563EB),
-  '?ы쉶': Color(0xFF2563EB),
-  '?뺤튂': Color(0xFF2563EB),
-  '?앺솢/臾명솕': Color(0xFF2563EB),
-  'IT/怨쇳븰': Color(0xFF2563EB),
+  '경제': Color(0xFF2563EB),
+  '세계': Color(0xFF2563EB),
+  '사회': Color(0xFF2563EB),
+  '정치': Color(0xFF2563EB),
+  '생활/문화': Color(0xFF2563EB),
+  'IT/과학': Color(0xFF2563EB),
 };
 const Color kDefaultColor = Color(0xFF2563EB);
 
@@ -41,7 +41,28 @@ Color _catColor(String cat) => kCategoryColors[cat] ?? kDefaultColor;
 Color _catColorAlpha(Color c, int alpha) =>
     Color.fromARGB(alpha, c.red, c.green, c.blue);
 
-// ?? 蹂꾩젏 ?꾩젽 (const ?앹꽦 媛?ν븳 ?뺥깭濡?遺꾨━) ??????????????????????
+MaterialStateProperty<Color?> _newsTileOverlay(bool isDark) {
+  return MaterialStateProperty.resolveWith((states) {
+    if (states.contains(MaterialState.pressed)) {
+      return isDark
+          ? Colors.white.withOpacity(0.06)
+          : Colors.black.withOpacity(0.04);
+    }
+    if (states.contains(MaterialState.hovered)) {
+      return isDark
+          ? Colors.white.withOpacity(0.03)
+          : Colors.black.withOpacity(0.02);
+    }
+    if (states.contains(MaterialState.focused)) {
+      return isDark
+          ? Colors.white.withOpacity(0.04)
+          : Colors.black.withOpacity(0.03);
+    }
+    return Colors.transparent;
+  });
+}
+
+// ── 별점 위젯 (const 생성 가능한 형태로 분리) ──────────────────────
 class _StarRow extends StatelessWidget {
   final int importance;
   final double size;
@@ -63,14 +84,14 @@ class _StarRow extends StatelessWidget {
   }
 }
 
-// ?? ?쒓컙 ?щ㎎ ?좏떥 ??????????????????????????????
+// ── 시간 포맷 유틸 ──────────────────────────────
 String _timeAgo(String isoDate) {
   if (isoDate.isEmpty) return '';
   try {
     final diff = DateTime.now().difference(DateTime.parse(isoDate));
-    if (diff.inMinutes < 60) return '${diff.inMinutes}遺???;
-    if (diff.inHours < 24) return '${diff.inHours}?쒓컙 ??;
-    return '${diff.inDays}????;
+    if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
+    if (diff.inHours < 24) return '${diff.inHours}시간 전';
+    return '${diff.inDays}일 전';
   } catch (_) {
     return '';
   }
@@ -78,7 +99,7 @@ String _timeAgo(String isoDate) {
 
 String _publisherLabel(String source) {
   final value = source.trim();
-  if (value.isEmpty) return '?몃줎??;
+  if (value.isEmpty) return '언론사';
 
   String slug = '';
 
@@ -113,34 +134,34 @@ String _publisherLabel(String source) {
     }
   }
 
-  if (slug.isEmpty) return '?몃줎??;
+  if (slug.isEmpty) return '언론사';
 
   const aliases = {
-    'fourfourtwo': '?뗫낵',
-    'ajunews': '?꾩＜寃쎌젣',
-    'etoday': '?댄닾?곗씠',
-    'sisajournal': '?쒖궗???,
-    'busan': '遺?곗씪蹂?,
-    'mediapen': '誘몃뵒?댄렂',
-    'newsj': '?댁뒪??,
-    'pinpoinnews': '??ъ씤?몃돱??,
-    'itoza': '?댄넗利?,
-    'edaily': '?대뜲?쇰━',
-    'yna': '?고빀?댁뒪',
-    'mk': '留ㅼ씪寃쎌젣',
-    'hankyung': '?쒓뎅寃쎌젣',
-    'sedaily': '?쒖슱寃쎌젣',
-    'chosun': '議곗꽑?쇰낫',
-    'joongang': '以묒븰?쇰낫',
-    'donga': '?숈븘?쇰낫',
-    'khan': '寃쏀뼢?좊Ц',
-    'huffingtonpost': '?덊봽?ъ뒪??,
-    'fnnews': '?뚯씠?몄뀥?댁뒪',
-    'heraldcorp': '?ㅻ윺?쒓꼍??,
-    'bizwatch': '鍮꾩쫰?뚯튂',
-    'mt': '癒몃땲?щ뜲??,
-    'moneytoday': '癒몃땲?щ뜲??,
-    'newsis': '?댁떆??,
+    'fourfourtwo': '풋볼',
+    'ajunews': '아주경제',
+    'etoday': '이투데이',
+    'sisajournal': '시사저널',
+    'busan': '부산일보',
+    'mediapen': '미디어펜',
+    'newsj': '뉴스젤',
+    'pinpoinnews': '핀포인트뉴스',
+    'itoza': '이토즈',
+    'edaily': '이데일리',
+    'yna': '연합뉴스',
+    'mk': '매일경제',
+    'hankyung': '한국경제',
+    'sedaily': '서울경제',
+    'chosun': '조선일보',
+    'joongang': '중앙일보',
+    'donga': '동아일보',
+    'khan': '경향신문',
+    'huffingtonpost': '허프포스트',
+    'fnnews': '파이낸셜뉴스',
+    'heraldcorp': '헤럴드경제',
+    'bizwatch': '비즈워치',
+    'mt': '머니투데이',
+    'moneytoday': '머니투데이',
+    'newsis': '뉴시스',
   };
 
   return aliases[slug.toLowerCase()] ?? slug;
@@ -148,13 +169,13 @@ String _publisherLabel(String source) {
 
 String _sourceDisplayName(TrendItem trend) {
   final source = trend.source.trim();
-  if (source.isEmpty) return '?몃줎??;
+  if (source.isEmpty) return '언론사';
   return _publisherLabel(source);
 }
 
-// ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
+// ════════════════════════════════════════════════
 // HomeScreen
-// ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
+// ════════════════════════════════════════════════
 DateTime? _trendDate(TrendItem trend) {
   return DateTime.tryParse(trend.published) ??
       DateTime.tryParse(trend.createdAt);
@@ -183,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isFeaturedExpanded = true;
   bool _isTrendInsightExpanded = false;
 
-  /// 5遺꾨쭏??媛?_TrendList???덈줈怨좎묠 ?좏샇瑜?蹂대궡??notifier
+  /// 5분마다 각 _TrendList에 새로고침 신호를 보내는 notifier
   final ValueNotifier<DateTime> _refreshNotifier =
       ValueNotifier(DateTime.now());
 
@@ -203,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen>
       }
     });
 
-    // 5遺꾨쭏??notifier瑜?媛깆떊 ??紐⑤뱺 ??씠 API ?ы샇異?
+    // 5분마다 notifier를 갱신 → 모든 탭이 API 재호출
     _autoRefreshTimer = Timer.periodic(
       const Duration(minutes: 5),
       (_) {
@@ -355,7 +376,7 @@ class _HomeScreenState extends State<HomeScreen>
                               padding: const EdgeInsets.symmetric(vertical: 80),
                               child: Center(
                                 child: Text(
-                                  '愿???댁뒪媛 ?놁뒿?덈떎.',
+                                  '관련 뉴스가 없습니다.',
                                   style: TextStyle(color: secondaryText),
                                 ),
                               ),
@@ -405,7 +426,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   void _openKeywordNews(String keyword) {
     _showNewsResultsSheet(
-      title: '#$keyword 愿???댁뒪',
+      title: '#$keyword 관련 뉴스',
       future: _api
           .fetchNewsByKeyword(keyword: keyword)
           .then((result) => result.items),
@@ -425,7 +446,7 @@ class _HomeScreenState extends State<HomeScreen>
     });
 
     _showNewsResultsSheet(
-      title: '"$query" 寃??寃곌낵',
+      title: '"$query" 검색 결과',
       future: _api.searchNews(query: query, sort: 'relevance'),
     );
   }
@@ -519,7 +540,7 @@ class _HomeScreenState extends State<HomeScreen>
                               padding: const EdgeInsets.symmetric(vertical: 80),
                               child: Center(
                                 child: Text(
-                                  '愿???댁뒪媛 ?놁뒿?덈떎.',
+                                  '관련 뉴스가 없습니다.',
                                   style: TextStyle(color: secondaryText),
                                 ),
                               ),
@@ -574,8 +595,8 @@ class _HomeScreenState extends State<HomeScreen>
         final secondaryText =
             isDark ? Colors.grey.shade400 : Colors.grey.shade700;
         final topLine = topKeywords.isEmpty
-            ? '?ㅻ뒛 ???댁뒋瑜??섏쭛?섍퀬 ?덉뼱??'
-            : '吏湲?${topKeywords.take(3).map((e) => e.keyword).join(', ')} ?댁뒋媛 留롮씠 ?멸툒?섍퀬 ?덉뼱??';
+            ? '오늘 새 이슈를 수집하고 있어요.'
+            : '지금 ${topKeywords.take(3).map((e) => e.keyword).join(', ')} 이슈가 많이 언급되고 있어요.';
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
@@ -625,14 +646,14 @@ class _HomeScreenState extends State<HomeScreen>
                                     : Colors.blue.shade700,
                               ),
                               child: Text(
-                                _isTrendInsightExpanded ? '?묎린' : '?붾낫湲?,
+                                _isTrendInsightExpanded ? '접기' : '더보기',
                                 style: const TextStyle(
                                     fontSize: 12, fontWeight: FontWeight.w800),
                               ),
                             ),
                             const SizedBox(width: 6),
                             IconButton(
-                              tooltip: '?덈줈怨좎묠',
+                              tooltip: '새로고침',
                               onPressed: () {
                                 setState(() {
                                   _insightFuture = _api.fetchTrendInsights();
@@ -672,7 +693,7 @@ class _HomeScreenState extends State<HomeScreen>
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
-                                      '?ㅻ뒛????以??몃젋??,
+                                      '오늘의 한 줄 트렌드',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w900,
@@ -712,7 +733,7 @@ class _HomeScreenState extends State<HomeScreen>
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                '?ㅻ뒛????以??몃젋??,
+                                '오늘의 한 줄 트렌드',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w900,
@@ -749,12 +770,12 @@ class _HomeScreenState extends State<HomeScreen>
                       const SizedBox(height: 12),
                       _InsightSectionTitle(
                         icon: Icons.local_fire_department_rounded,
-                        title: '?ㅼ떆媛??멸린 ?ㅼ썙???곸쐞 10',
-                        trailing: '${topKeywords.length}媛?,
+                        title: '실시간 인기 키워드 상위 10',
+                        trailing: '${topKeywords.length}개',
                       ),
                       const SizedBox(height: 8),
                       if (topKeywords.isEmpty)
-                        const _InsightEmpty(message: '?꾩쭅 吏묎퀎???ㅼ썙?쒓? ?놁뒿?덈떎.')
+                        const _InsightEmpty(message: '아직 집계된 키워드가 없습니다.')
                       else
                         Wrap(
                           spacing: 8,
@@ -770,12 +791,12 @@ class _HomeScreenState extends State<HomeScreen>
                       const SizedBox(height: 12),
                       _InsightSectionTitle(
                         icon: Icons.trending_up_rounded,
-                        title: '湲됱긽???댁뒋 ?곸쐞 5',
-                        trailing: '理쒓렐 1?쒓컙',
+                        title: '급상승 이슈 상위 5',
+                        trailing: '최근 1시간',
                       ),
                       const SizedBox(height: 8),
                       if (rising.isEmpty)
-                        const _CompactEmptyRow(message: '湲됱긽??議곌굔??留뚯”???댁뒋媛 ?놁뒿?덈떎.')
+                        const _CompactEmptyRow(message: '급상승 조건을 만족한 이슈가 없습니다.')
                       else
                         Column(
                           children: [
@@ -793,7 +814,7 @@ class _HomeScreenState extends State<HomeScreen>
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          '?붾낫湲곕? ?꾨Ⅴ硫??멸린 ?ㅼ썙?쒖? 湲됱긽???댁뒋瑜??뺤씤?????덉뒿?덈떎.',
+                          '더보기를 누르면 인기 키워드와 급상승 이슈를 확인할 수 있습니다.',
                           style: TextStyle(
                             fontSize: 11.5,
                             color: isDark
@@ -863,7 +884,7 @@ class _HomeScreenState extends State<HomeScreen>
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '?댁뒪 寃??,
+                      '뉴스 검색',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
@@ -914,7 +935,7 @@ class _HomeScreenState extends State<HomeScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '?꾩껜 ?댁뒪',
+                  '전체 뉴스',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
@@ -923,7 +944,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '理쒖떊?쒖쑝濡??꾩껜 湲곗궗瑜??댁뼱???뺤씤?⑸땲??',
+                  '최신순으로 전체 기사를 이어서 확인합니다.',
                   style: TextStyle(
                     fontSize: 11.5,
                     color: secondaryText,
@@ -995,12 +1016,12 @@ class _HomeScreenState extends State<HomeScreen>
               const SizedBox(height: 16),
               _InsightSectionTitle(
                 icon: Icons.local_fire_department_rounded,
-                title: '?ㅼ떆媛??멸린 ?ㅼ썙???곸쐞 10',
-                trailing: '愿???댁뒪 湲곗?',
+                title: '실시간 인기 키워드 상위 10',
+                trailing: '관련 뉴스 기준',
               ),
               const SizedBox(height: 10),
               if (keywords.isEmpty)
-                const _InsightEmpty(message: '?꾩쭅 吏묎퀎???ㅼ썙?쒓? ?놁뒿?덈떎.')
+                const _InsightEmpty(message: '아직 집계된 키워드가 없습니다.')
               else
                 Column(
                   children: [
@@ -1016,12 +1037,12 @@ class _HomeScreenState extends State<HomeScreen>
               const SizedBox(height: 18),
               _InsightSectionTitle(
                 icon: Icons.trending_up_rounded,
-                title: '湲됱긽???댁뒋 ?곸쐞 5',
-                trailing: '理쒓렐 1?쒓컙',
+                title: '급상승 이슈 상위 5',
+                trailing: '최근 1시간',
               ),
               const SizedBox(height: 10),
               if (rising.isEmpty)
-                const _InsightEmpty(message: '湲됱긽??議곌굔??留뚯”???댁뒋媛 ?놁뒿?덈떎.')
+                const _InsightEmpty(message: '급상승 조건을 만족한 이슈가 없습니다.')
               else
                 Column(
                   children: [
@@ -1093,25 +1114,25 @@ class _HomeScreenState extends State<HomeScreen>
     final rising = insight.risingIssues.take(2).map((e) => e.keyword).toList();
 
     if (keywords.isEmpty && rising.isEmpty) {
-      return 'AI媛 ?ㅻ뒛??二쇱슂 ?댁뒋瑜??섏쭛?섍퀬 ?덉뒿?덈떎.\n???댁뒪媛 ?볦씠硫??듭떖 ?ㅼ썙?쒖? 遺꾩쐞湲곕? ?먮룞?쇰줈 ?붿빟?⑸땲??';
+      return 'AI가 오늘의 주요 이슈를 수집하고 있습니다.\n새 뉴스가 쌓이면 핵심 키워드와 분위기를 자동으로 요약합니다.';
     }
 
-    final keywordText = keywords.isEmpty ? '?덈줈???댁뒪' : keywords.join(', ');
+    final keywordText = keywords.isEmpty ? '새로운 뉴스' : keywords.join(', ');
     final risingText = rising.isEmpty
-        ? '?쒕졆??湲됱긽???댁뒋???꾩쭅 ?놁뒿?덈떎'
-        : '${rising.join(', ')} 愿???댁뒪媛 鍮좊Ⅴ寃??섍퀬 ?덉뒿?덈떎';
+        ? '뚜렷한 급상승 이슈는 아직 없습니다'
+        : '${rising.join(', ')} 관련 뉴스가 빠르게 늘고 있습니다';
     final mood = insight.sentiment.temperature >= 71
-        ? '湲곕?媛먯씠 ?곗꽭?⑸땲??
+        ? '기대감이 우세합니다'
         : insight.sentiment.temperature <= 30
-            ? '遺덉븞媛먯씠 ?쎈땲??
-            : '以묐┰?곸씤 ?먮쫫?낅땲??;
+            ? '불안감이 큽니다'
+            : '중립적인 흐름입니다';
 
-    return '?ㅻ뒛? $keywordText ?댁뒋媛 留롮씠 ?멸툒?섍퀬 ?덉뒿?덈떎.\n$risingText.\n?꾩껜 ?댁뒪 遺꾩쐞湲곕뒗 $mood.';
+    return '오늘은 $keywordText 이슈가 많이 언급되고 있습니다.\n$risingText.\n전체 뉴스 분위기는 $mood.';
   }
 
   Map<String, List<TrendKeyword>> _buildCategoryHotKeywords(
       List<TrendKeyword> keywords) {
-    const categories = ['?뺤튂', '寃쎌젣', 'IT/怨쇳븰', '?ы쉶', '?멸퀎', '?앺솢/臾명솕'];
+    const categories = ['정치', '경제', 'IT/과학', '사회', '세계', '생활/문화'];
     final result = <String, List<TrendKeyword>>{};
 
     for (final category in categories) {
@@ -1127,13 +1148,13 @@ class _HomeScreenState extends State<HomeScreen>
       case 0:
         return 'NEW';
       case 1:
-        return '??';
+        return '▲3';
       case 2:
-        return '??';
+        return '▲1';
       case 3:
-        return '??';
+        return '▼2';
       default:
-        return index.isEven ? '??' : '-';
+        return index.isEven ? '▲1' : '-';
     }
   }
 
@@ -1181,6 +1202,11 @@ class _HomeScreenState extends State<HomeScreen>
                     InkWell(
                       onTap: _toggleFeaturedNews,
                       borderRadius: BorderRadius.circular(12),
+                      overlayColor: _newsTileOverlay(
+                        Theme.of(context).brightness == Brightness.dark,
+                      ),
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Row(
@@ -1206,7 +1232,7 @@ class _HomeScreenState extends State<HomeScreen>
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                '?ㅻ뒛??二쇱슂 ?댁뒪',
+                                '오늘의 주요 뉴스',
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w800,
@@ -1217,7 +1243,7 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                             if (!isLoading)
                               Text(
-                                '${items.length}嫄?,
+                                '${items.length}건',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
@@ -1260,7 +1286,7 @@ class _HomeScreenState extends State<HomeScreen>
                                           height: 96,
                                           child: Center(
                                             child: Text(
-                                              '?꾩쭅 ?ㅻ뒛??二쇱슂 ?댁뒪媛 ?놁뒿?덈떎.',
+                                              '아직 오늘의 주요 뉴스가 없습니다.',
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 color: Theme.of(context)
@@ -1375,7 +1401,7 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        '?ㅼ떆媛??댁뒪',
+                        '실시간 뉴스',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
@@ -1413,7 +1439,7 @@ class _HomeScreenState extends State<HomeScreen>
                       ],
                       const Spacer(),
                       IconButton(
-                        tooltip: isDark ? '?쇱씠??紐⑤뱶' : '?ㅽ겕 紐⑤뱶',
+                        tooltip: isDark ? '라이트 모드' : '다크 모드',
                         onPressed: () =>
                             ThemeController.instance.toggleThemeMode(
                           brightness:
@@ -1459,7 +1485,7 @@ class _HomeScreenState extends State<HomeScreen>
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                '理쒓렐 24?쒓컙 遺꾩꽍',
+                                '최근 24시간 분석',
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: isDark
@@ -1720,7 +1746,7 @@ class _AiBriefingCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'AI 釉뚮━??,
+                    'AI 브리핑',
                     style: TextStyle(
                       color: titleText,
                       fontSize: 18,
@@ -1738,7 +1764,7 @@ class _AiBriefingCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '留덉?留??낅뜲?댄듃 $updatedAt',
+                      '마지막 업데이트 $updatedAt',
                       style: TextStyle(
                         color: mutedText,
                         fontSize: 12,
@@ -1748,7 +1774,7 @@ class _AiBriefingCard extends StatelessWidget {
                   ],
                 ),
                 IconButton(
-                  tooltip: '?덈줈怨좎묠',
+                  tooltip: '새로고침',
                   onPressed: onRefresh,
                   icon: const Icon(Icons.refresh_rounded,
                       color: Color(0xFF2563EB), size: 19),
@@ -1844,7 +1870,7 @@ class _TrendDashboardCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '?몃젋????쒕낫??,
+                  '트렌드 대시보드',
                   style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
@@ -1858,7 +1884,7 @@ class _TrendDashboardCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  '?꾩씪 ?鍮?$deltaText',
+                  '전일 대비 $deltaText',
                   style: TextStyle(
                     color: deltaColor,
                     fontSize: 12,
@@ -1873,7 +1899,7 @@ class _TrendDashboardCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _DashboardMetricCard(
-                  label: '?ㅻ뒛???몃젋???먯닔',
+                  label: '오늘의 트렌드 점수',
                   value: '$trendScore',
                   suffix: '/100',
                   icon: Icons.speed_rounded,
@@ -1883,9 +1909,9 @@ class _TrendDashboardCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: _DashboardMetricCard(
-                  label: '?댁뒪 媛먯젙?⑤룄',
+                  label: '뉴스 감정온도',
                   value: '${sentiment.temperature}',
-                  suffix: '째',
+                  suffix: '°',
                   icon: Icons.thermostat_rounded,
                   color: sentiment.temperature >= 71
                       ? const Color(0xFF16A34A)
@@ -2010,14 +2036,14 @@ class _SearchDiscoverySection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _DiscoveryChipRow(
-            title: '?멸린 寃?됱뼱',
+            title: '인기 검색어',
             chips: popularKeywords.map((item) => item.keyword).toList(),
             onTap: onKeywordTap,
           ),
           if (recentSearches.isNotEmpty) ...[
             const SizedBox(height: 8),
             _DiscoveryChipRow(
-              title: '理쒓렐 寃?됱뼱',
+              title: '최근 검색어',
               chips: recentSearches,
               onTap: onKeywordTap,
             ),
@@ -2101,7 +2127,7 @@ class _KeywordRankTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _catColor(keyword.category);
     final isNew = rankBadge == 'NEW';
-    final isDown = rankBadge.startsWith('??);
+    final isDown = rankBadge.startsWith('▼');
     final isTop3 = rank <= 3;
 
     return Padding(
@@ -2164,7 +2190,7 @@ class _KeywordRankTile extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '${keyword.category} 쨌 愿???댁뒪 ${keyword.newsCount}嫄?,
+                        '${keyword.category} · 관련 뉴스 ${keyword.newsCount}건',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
@@ -2223,8 +2249,8 @@ class _CategoryHotTrendSection extends StatelessWidget {
       children: [
         _InsightSectionTitle(
           icon: Icons.category_rounded,
-          title: '移댄뀒怨좊━蹂?HOT ?몃젋??,
-          trailing: '?뺤튂 쨌 寃쎌젣 쨌 IT 쨌 ?ы쉶',
+          title: '카테고리별 HOT 트렌드',
+          trailing: '정치 · 경제 · IT · 사회',
         ),
         const SizedBox(height: 10),
         SizedBox(
@@ -2300,7 +2326,7 @@ class _CategoryHotCard extends StatelessWidget {
           const SizedBox(height: 12),
           if (keywords.isEmpty)
             Text(
-              '吏묎퀎 ?湲?以?,
+              '집계 대기 중',
               style: TextStyle(
                 fontSize: 12,
                 color: secondaryText,
@@ -2356,8 +2382,8 @@ class _SentimentInsightPanel extends StatelessWidget {
         children: [
           _InsightSectionTitle(
             icon: Icons.insights_rounded,
-            title: '?댁뒪 媛먯젙 遺꾩꽍',
-            trailing: '理쒓렐 7??,
+            title: '뉴스 감정 분석',
+            trailing: '최근 7일',
           ),
           const SizedBox(height: 14),
           _SentimentTemperatureCard(sentiment: sentiment),
@@ -2416,7 +2442,7 @@ class _SevenDaySentimentChart extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     i == values.length - 1
-                        ? '?ㅻ뒛'
+                        ? '오늘'
                         : 'D-${values.length - 1 - i}',
                     style: TextStyle(
                       fontSize: 10,
@@ -2466,7 +2492,7 @@ class _SentimentRatioBar extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          '湲띿젙 ${sentiment.positiveRatio}% 쨌 以묐┰ ${sentiment.neutralRatio}% 쨌 遺??${sentiment.negativeRatio}%',
+          '긍정 ${sentiment.positiveRatio}% · 중립 ${sentiment.neutralRatio}% · 부정 ${sentiment.negativeRatio}%',
           style: TextStyle(
             fontSize: 12,
             color: Colors.grey.shade700,
@@ -2520,10 +2546,10 @@ class _TrendSearchBar extends StatelessWidget {
       onSubmitted: onSubmitted,
       textInputAction: TextInputAction.search,
       decoration: InputDecoration(
-        hintText: '?ㅼ썙?쒕줈 ?댁뒪 寃??,
+        hintText: '키워드로 뉴스 검색',
         prefixIcon: const Icon(Icons.search_rounded, size: 20),
         suffixIcon: IconButton(
-          tooltip: '寃??,
+          tooltip: '검색',
           onPressed: onSearch,
           icon: const Icon(Icons.arrow_forward_rounded, size: 20),
         ),
@@ -2578,8 +2604,9 @@ class _KeywordChip extends StatelessWidget {
       child: InkWell(
         customBorder: const StadiumBorder(),
         onTap: onTap,
-        hoverColor: const Color(0xFF2563EB).withOpacity(0.05),
-        splashColor: const Color(0xFF2563EB).withOpacity(0.08),
+        overlayColor: _newsTileOverlay(isDark),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
           child: Row(
@@ -2653,7 +2680,7 @@ class _SentimentTemperatureCard extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  '?ㅻ뒛 ?댁뒪 媛먯젙?⑤룄',
+                  '오늘 뉴스 감정온도',
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w900,
@@ -2662,7 +2689,7 @@ class _SentimentTemperatureCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '${sentiment.temperature}째',
+                '${sentiment.temperature}°',
                 style: TextStyle(
                   fontSize: 15.5,
                   fontWeight: FontWeight.w900,
@@ -2680,10 +2707,10 @@ class _SentimentTemperatureCard extends StatelessWidget {
                 ),
                 child: Text(
                   sentiment.temperature >= 71
-                      ? '湲띿젙'
+                      ? '긍정'
                       : sentiment.temperature <= 30
-                          ? '遺??
-                          : '以묐┰',
+                          ? '부정'
+                          : '중립',
                   style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w800,
@@ -2965,7 +2992,7 @@ class _HomeGridPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// ?? ???꾩씠肄????????????????????????
+// ── 앱 아이콘 ───────────────────────
 class _MajorNewsCard extends StatelessWidget {
   final TrendItem trend;
   final int index;
@@ -2994,7 +3021,7 @@ class _MajorNewsCard extends StatelessWidget {
     final chipBorder =
         isDark ? const Color(0xFF1F2937) : const Color(0xFFDCE7FF);
     final timeAgo = _timeAgo(trend.published);
-    final chipLabel = trend.category.isEmpty ? '?쇰컲' : trend.category;
+    final chipLabel = trend.category.isEmpty ? '일반' : trend.category;
     final isTopStory = index == 0;
     final isFeatured = index == 0;
     final cardWidth = width ?? (isFeatured ? 268.0 : 242.0);
@@ -3018,8 +3045,9 @@ class _MajorNewsCard extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(18),
-          hoverColor: const Color(0xFF2563EB).withOpacity(0.04),
-          splashColor: const Color(0xFF2563EB).withOpacity(0.08),
+          overlayColor: _newsTileOverlay(isDark),
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
           child: Container(
             width: cardWidth,
             height: cardHeight,
@@ -3065,7 +3093,7 @@ class _MajorNewsCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          isTopStory ? '二쇱슂' : '?댁뒪',
+                          isTopStory ? '주요' : '뉴스',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
@@ -3103,7 +3131,7 @@ class _MajorNewsCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
-                            '?듭떖',
+                            '핵심',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
@@ -3128,7 +3156,7 @@ class _MajorNewsCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        timeAgo.isEmpty ? '諛⑷툑 ?? : timeAgo,
+                        timeAgo.isEmpty ? '방금 전' : timeAgo,
                         style: TextStyle(
                           fontSize: 10.5,
                           color: isDark
@@ -3167,7 +3195,7 @@ class _AppIcon extends StatelessWidget {
   }
 }
 
-// ?? 醫뚯륫 Drawer 硫붾돱 ???????????????????????
+// ── 좌측 Drawer 메뉴 ───────────────────────
 class _AppDrawer extends StatelessWidget {
   const _AppDrawer();
 
@@ -3185,7 +3213,7 @@ class _AppDrawer extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ?ㅻ뜑 ?곸뿭
+              // 헤더 영역
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -3233,7 +3261,7 @@ class _AppDrawer extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '?ㅼ떆媛??몃젋??遺꾩꽍',
+                      '실시간 트렌드 분석',
                       style: TextStyle(
                         fontSize: 14,
                         color: secondaryText,
@@ -3243,15 +3271,15 @@ class _AppDrawer extends StatelessWidget {
                 ),
               ),
 
-              // 硫붾돱 由ъ뒪??
+              // 메뉴 리스트
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   children: [
                     _DrawerMenuItem(
                       icon: Icons.home_rounded,
-                      title: '??,
-                      subtitle: '?쒕뵫 ?섏씠吏濡?,
+                      title: '홈',
+                      subtitle: '랜딩 페이지로',
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.of(context).pushReplacement(
@@ -3264,18 +3292,18 @@ class _AppDrawer extends StatelessWidget {
                     const Divider(height: 1),
                     _DrawerMenuItem(
                       icon: Icons.newspaper_rounded,
-                      title: '?ㅼ떆媛??댁뒪',
-                      subtitle: '理쒖떊 ?댁뒪 ?뺤씤',
+                      title: '실시간 뉴스',
+                      subtitle: '최신 뉴스 확인',
                       onTap: () {
                         Navigator.pop(context);
-                        // ?대? ?댁뒪 ?붾㈃?대?濡??リ린留???
+                        // 이미 뉴스 화면이므로 닫기만 함
                       },
                     ),
                     const Divider(height: 1),
                     _DrawerMenuItem(
                       icon: Icons.psychology_rounded,
-                      title: '怨듯룷?먯슃吏??,
-                      subtitle: '?쒖옣 ?щ━ ?뺤씤',
+                      title: '공포탐욕지수',
+                      subtitle: '시장 심리 확인',
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.of(context).push(
@@ -3288,8 +3316,8 @@ class _AppDrawer extends StatelessWidget {
                     const Divider(height: 1),
                     _DrawerMenuItem(
                       icon: Icons.show_chart_rounded,
-                      title: '利앹떆',
-                      subtitle: '二쇱슂 吏??諛?醫낅ぉ',
+                      title: '증시',
+                      subtitle: '주요 지수 및 종목',
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.of(context).push(
@@ -3303,7 +3331,7 @@ class _AppDrawer extends StatelessWidget {
                 ),
               ),
 
-              // ?섎떒 ?뺣낫
+              // 하단 정보
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -3346,14 +3374,14 @@ class _AppDrawer extends StatelessWidget {
           children: [
             Icon(Icons.schedule, color: Colors.blue),
             SizedBox(width: 8),
-            Text('以鍮꾩쨷'),
+            Text('준비중'),
           ],
         ),
-        content: Text('$feature 湲곕뒫? 怨?異붽????덉젙?낅땲??'),
+        content: Text('$feature 기능은 곧 추가될 예정입니다.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('?뺤씤'),
+            child: const Text('확인'),
           ),
         ],
       ),
@@ -3361,7 +3389,7 @@ class _AppDrawer extends StatelessWidget {
   }
 }
 
-// ?? Drawer 硫붾돱 ?꾩씠?????????????????????????
+// ── Drawer 메뉴 아이템 ───────────────────────
 class _DrawerMenuItem extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -3418,7 +3446,7 @@ class _DrawerMenuItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                '以鍮꾩쨷',
+                '준비중',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
@@ -3441,9 +3469,9 @@ class _DrawerMenuItem extends StatelessWidget {
   }
 }
 
-// ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
-// _TrendList - ??퀎 臾댄븳 ?ㅽ겕濡?由ъ뒪??
-// ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
+// ════════════════════════════════════════════════
+// _TrendList - 탭별 무한 스크롤 리스트
+// ════════════════════════════════════════════════
 class _TrendList extends StatefulWidget {
   final String category;
   final String categoryLabel;
@@ -3466,7 +3494,7 @@ class _TrendListState extends State<_TrendList>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   final ApiService _api = ApiService();
 
-  // ?섏젙?? ?꾨옒 build 硫붿꽌?쒖? 蹂?섎챸??留욎텛湲??꾪빐 _scrollController濡??듭씪
+  // 수정됨: 아래 build 메서드와 변수명을 맞추기 위해 _scrollController로 통일
   final ScrollController _scrollController = ScrollController();
 
   List<TrendItem> _trends = [];
@@ -3477,7 +3505,7 @@ class _TrendListState extends State<_TrendList>
   String? _error;
   static const int _pageSize = 20;
 
-  // ??씠 ?ㅼ떆 蹂댁씪 ???먮룞 ?덈줈怨좎묠???꾪븳 ?뚮옒洹?
+  // 탭이 다시 보일 때 자동 새로고침을 위한 플래그
   DateTime? _lastLoadTime;
   static const _autoRefreshThreshold = Duration(minutes: 3);
 
@@ -3489,27 +3517,25 @@ class _TrendListState extends State<_TrendList>
     super.initState();
     _load();
     _scrollController.addListener(_onScroll);
-    // 遺紐⑥쓽 refreshNotifier 蹂寃????먮룞 ?덈줈怨좎묠
+    // 부모의 refreshNotifier 변경 시 자동 새로고침
     widget.refreshNotifier.addListener(_onAutoRefresh);
-    // ???앸챸二쇨린 愿李??쒖옉
+    // 앱 생명주기 관찰 시작
     WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // ?깆씠 ?ㅼ떆 ?쒖꽦?붾릺?덉쓣 ??
+    // 앱이 다시 활성화되었을 때
     if (state == AppLifecycleState.resumed) {
       _checkAndRefreshIfNeeded();
     }
   }
 
-  // ??씠 ?ㅼ떆 蹂댁씪 ???먮룞 ?덈줈怨좎묠 泥댄겕
+  // 탭이 다시 보일 때 자동 새로고침 체크
   void _checkAndRefreshIfNeeded() {
     if (_lastLoadTime != null) {
       final timeSinceLastLoad = DateTime.now().difference(_lastLoadTime!);
       if (timeSinceLastLoad > _autoRefreshThreshold) {
-        if (kDebugMode) print(
-            '?벑 Auto-refreshing ${widget.category} (${timeSinceLastLoad.inMinutes}遺?寃쎄낵)');
         _refresh();
       }
     }
@@ -3538,7 +3564,6 @@ class _TrendListState extends State<_TrendList>
   Future<void> _load() async {
     if (_isLoading) return;
     if (!mounted) return;
-    if (kDebugMode) print('?벑 _load() started for category: ${widget.category}');
     setState(() {
       _isLoading = true;
       _error = null;
@@ -3551,26 +3576,23 @@ class _TrendListState extends State<_TrendList>
         sort: 'latest',
       );
       if (!mounted) return;
-      if (kDebugMode) print('?벑 _load() success: ${data.length} trends');
       setState(() {
         _trends = data;
         _offset = data.length;
         _hasMore = data.length == _pageSize;
         _error = null;
         _isLoading = false;
-        _lastLoadTime = DateTime.now(); // 濡쒕뱶 ?쒓컙 湲곕줉
+        _lastLoadTime = DateTime.now(); // 로드 시간 기록
       });
     } catch (e) {
-      if (kDebugMode) print('?벑 _load() error: $e');
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _error = e.toString();
       });
-      // 5珥????ъ떆??(鍮?由ъ뒪?몄씪 ?뚮쭔)
+      // 5초 후 재시도 (빈 리스트일 때만)
       Future.delayed(const Duration(seconds: 5), () {
         if (mounted && _trends.isEmpty) {
-          if (kDebugMode) print('?벑 Auto-retrying after error...');
           _load();
         }
       });
@@ -3613,7 +3635,7 @@ class _TrendListState extends State<_TrendList>
         _offset = data.length;
         _hasMore = data.length == _pageSize;
         _error = null;
-        _lastLoadTime = DateTime.now(); // ?덈줈怨좎묠 ?쒓컙 湲곕줉
+        _lastLoadTime = DateTime.now(); // 새로고침 시간 기록
       });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -3624,7 +3646,7 @@ class _TrendListState extends State<_TrendList>
   Widget build(BuildContext context) {
     super.build(context);
 
-    // ??씠 蹂댁씪 ?뚮쭏???먮룞 ?덈줈怨좎묠 泥댄겕
+    // 탭이 보일 때마다 자동 새로고침 체크
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _checkAndRefreshIfNeeded();
@@ -3686,9 +3708,9 @@ class _TrendListState extends State<_TrendList>
   }
 }
 
-// ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
+// ════════════════════════════════════════════════
 // _TrendCard
-// ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
+// ════════════════════════════════════════════════
 class _TrendCard extends StatefulWidget {
   final int rank;
   final TrendItem trend;
@@ -3765,8 +3787,9 @@ class _TrendCardState extends State<_TrendCard>
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(14),
-                hoverColor: const Color(0xFF2563EB).withOpacity(0.02),
-                splashColor: const Color(0xFF2563EB).withOpacity(0.06),
+                overlayColor: _newsTileOverlay(isDark),
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
                 onTap: widget.onTapOverride ?? () => _showDetail(context),
                 onHover: (hovering) {
                   setState(() => _isHovered = hovering);
@@ -3841,7 +3864,7 @@ class _TrendCardState extends State<_TrendCard>
                                 children: [
                                   _CategoryBadge(
                                     category: widget.trend.category.isEmpty
-                                        ? '?쇰컲'
+                                        ? '일반'
                                         : widget.trend.category,
                                     color: accent,
                                     isImportant: false,
@@ -3859,7 +3882,7 @@ class _TrendCardState extends State<_TrendCard>
                                             BorderRadius.circular(999),
                                       ),
                                       child: const Text(
-                                        '?듭떖',
+                                        '핵심',
                                         style: TextStyle(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w800,
@@ -3883,7 +3906,7 @@ class _TrendCardState extends State<_TrendCard>
                                       borderRadius: BorderRadius.circular(999),
                                     ),
                                     child: Text(
-                                      isTop3 ? '二쇱슂' : '?댁뒪',
+                                      isTop3 ? '주요' : '뉴스',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w800,
@@ -3975,7 +3998,7 @@ class _NewsListRowState extends State<_NewsListRow> {
     final publishedLabel = _timeAgo(widget.trend.published);
     final publisher = _sourceDisplayName(widget.trend);
     final chipLabel =
-        widget.trend.category.isEmpty ? '?쇰컲' : widget.trend.category;
+        widget.trend.category.isEmpty ? '일반' : widget.trend.category;
     final isTop = widget.rank <= 3;
 
     return Padding(
@@ -3985,8 +4008,9 @@ class _NewsListRowState extends State<_NewsListRow> {
         child: InkWell(
           onTap: widget.onTapOverride ?? () => _showDetail(context),
           borderRadius: BorderRadius.circular(12),
-          hoverColor: const Color(0xFF2563EB).withOpacity(0.025),
-          splashColor: const Color(0xFF2563EB).withOpacity(0.06),
+          overlayColor: _newsTileOverlay(isDark),
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
           onHover: (hovering) {
             setState(() => _isHovered = hovering);
           },
@@ -4061,7 +4085,7 @@ class _NewsListRowState extends State<_NewsListRow> {
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
-                                '?듭떖',
+                                '핵심',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
@@ -4087,7 +4111,7 @@ class _NewsListRowState extends State<_NewsListRow> {
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
-                              isTop ? '二쇱슂' : '?댁뒪',
+                              isTop ? '주요' : '뉴스',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
@@ -4100,7 +4124,7 @@ class _NewsListRowState extends State<_NewsListRow> {
                             ),
                           ),
                           Text(
-                            publishedLabel.isEmpty ? '諛⑷툑 ?? : publishedLabel,
+                            publishedLabel.isEmpty ? '방금 전' : publishedLabel,
                             style: TextStyle(
                               fontSize: 10.5,
                               color: secondaryText,
@@ -4198,9 +4222,9 @@ class _CategoryBadge extends StatelessWidget {
   }
 }
 
-// ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
+// ════════════════════════════════════════════════
 // _DetailSheet
-// ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
+// ════════════════════════════════════════════════
 class _DetailSheet extends StatelessWidget {
   final TrendItem trend;
   const _DetailSheet({required this.trend});
@@ -4216,10 +4240,10 @@ class _DetailSheet extends StatelessWidget {
     final catColor = _catColor(trend.category);
 
     return GestureDetector(
-      onTap: () => Navigator.pop(context), // 諛붽묑 ?곸뿭 ?대┃ ???リ린
-      behavior: HitTestBehavior.opaque, // ?щ챸 ?곸뿭????媛먯?
+      onTap: () => Navigator.pop(context), // 바깥 영역 클릭 시 닫기
+      behavior: HitTestBehavior.opaque, // 투명 영역도 탭 감지
       child: GestureDetector(
-        onTap: () {}, // Sheet ?대? ?대┃? ?꾪뙆 ???섎룄濡?
+        onTap: () {}, // Sheet 내부 클릭은 전파 안 되도록
         child: DraggableScrollableSheet(
           initialChildSize: 0.7,
           minChildSize: 0.4,
@@ -4298,47 +4322,37 @@ class _DetailSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   if (trend.thumbnailUrl.trim().isNotEmpty) ...[
-                    ClipRRect(
+                    NetworkThumbnail(
+                      imageUrl: trend.thumbnailUrl.trim(),
+                      fit: BoxFit.cover,
+                      aspectRatio: 16 / 9,
                       borderRadius: BorderRadius.circular(14),
-                      child: AspectRatio(
-                        aspectRatio: 16 / 9,
-                        child: Image.network(
-                          trend.thumbnailUrl.trim(),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: isDark
-                                ? const Color(0xFF111827)
-                                : const Color(0xFFF8FAFC),
-                            alignment: Alignment.center,
-                            child: Icon(
-                              Icons.broken_image_outlined,
-                              color: isDark
-                                  ? Colors.grey.shade500
-                                  : Colors.blueGrey.shade300,
-                              size: 26,
-                            ),
+                      collapseOnError: true,
+                      errorWidget: Container(
+                        color: isDark
+                            ? const Color(0xFF111827)
+                            : const Color(0xFFF8FAFC),
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          color: isDark
+                              ? Colors.grey.shade500
+                              : Colors.blueGrey.shade300,
+                          size: 26,
+                        ),
+                      ),
+                      loadingWidget: Container(
+                        color: isDark
+                            ? const Color(0xFF111827)
+                            : const Color(0xFFF8FAFC),
+                        alignment: Alignment.center,
+                        child: const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF2563EB),
                           ),
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return Container(
-                              color: isDark
-                                  ? const Color(0xFF111827)
-                                  : const Color(0xFFF8FAFC),
-                              alignment: Alignment.center,
-                              child: SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: const Color(0xFF2563EB),
-                                  value: progress.expectedTotalBytes == null
-                                      ? null
-                                      : progress.cumulativeBytesLoaded /
-                                          progress.expectedTotalBytes!,
-                                ),
-                              ),
-                            );
-                          },
                         ),
                       ),
                     ),
@@ -4359,7 +4373,7 @@ class _DetailSheet extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      trend.importance >= 4 ? '?듭떖 ?댁뒋' : '?쇰컲 ?댁뒋',
+                      trend.importance >= 4 ? '핵심 이슈' : '일반 이슈',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -4383,7 +4397,7 @@ class _DetailSheet extends StatelessWidget {
                       child: Text(
                         trend.summaryKr.isNotEmpty
                             ? trend.summaryKr
-                            : '?붿빟 ?뺣낫媛 ?놁뒿?덈떎.',
+                            : '요약 정보가 없습니다.',
                         style: TextStyle(
                           fontSize: 15,
                           height: 1.7,
@@ -4401,7 +4415,7 @@ class _DetailSheet extends StatelessWidget {
                         onPressed: () => _openUrl(trend.link, context),
                         icon: const Icon(Icons.open_in_new, size: 18),
                         label: const Text(
-                          '?먮Ц 蹂닿린',
+                          '원문 보기',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
@@ -4428,14 +4442,14 @@ class _DetailSheet extends StatelessWidget {
     if (!await launchUrl(uri, webOnlyWindowName: '_blank')) {
       if (ctx.mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('留곹겕瑜??????놁뒿?덈떎.')),
+          const SnackBar(content: Text('링크를 열 수 없습니다.')),
         );
       }
     }
   }
 }
 
-// ?? ?먮윭/鍮??붾㈃ ?꾩젽 ????????????????????????????
+// ── 에러/빈 화면 위젯 ────────────────────────────
 class _ErrorView extends StatelessWidget {
   final VoidCallback onRetry;
   const _ErrorView({required this.onRetry});
@@ -4454,7 +4468,7 @@ class _ErrorView extends StatelessWidget {
               size: 64,
               color: isDark ? Colors.grey.shade600 : const Color(0xFFDDDDDD)),
           const SizedBox(height: 16),
-          Text('諛깆뿏???쒕쾭 ?곌껐 以?..',
+          Text('백엔드 서버 연결 중...',
               style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -4463,7 +4477,7 @@ class _ErrorView extends StatelessWidget {
           Text('https://news-summarizer.bum2432.workers.dev',
               style: TextStyle(fontSize: 13, color: secondaryText)),
           const SizedBox(height: 4),
-          Text('Ollama 遺꾩꽍 ?꾨즺 ???먮룞 濡쒕뱶?⑸땲??,
+          Text('Ollama 분석 완료 후 자동 로드됩니다',
               style: TextStyle(fontSize: 12, color: secondaryText)),
           const SizedBox(height: 24),
           const SizedBox(
@@ -4474,7 +4488,7 @@ class _ErrorView extends StatelessWidget {
           TextButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh),
-            label: const Text('吏湲??ъ떆??),
+            label: const Text('지금 재시도'),
           ),
         ],
       ),
@@ -4501,16 +4515,15 @@ class _EmptyView extends StatelessWidget {
               size: 60,
               color: isDark ? Colors.grey.shade600 : const Color(0xFFDDDDDD)),
           const SizedBox(height: 12),
-          Text('$label ?댁뒪媛 ?놁뒿?덈떎', style: TextStyle(color: secondaryText)),
+          Text('$label 뉴스가 없습니다', style: TextStyle(color: secondaryText)),
           const SizedBox(height: 16),
           TextButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh),
-            label: Text('?덈줈怨좎묠', style: TextStyle(color: primaryText)),
+            label: Text('새로고침', style: TextStyle(color: primaryText)),
           ),
         ],
       ),
     );
   }
 }
-

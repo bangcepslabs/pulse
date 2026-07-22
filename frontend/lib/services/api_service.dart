@@ -1,10 +1,9 @@
-﻿import 'package:flutter/foundation.dart';
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/trend_item.dart';
 import '../models/trend_insight.dart';
 
-/// API ?듭떊 ?쒕퉬??
+/// API 통신 서비스
 class _CachedJsonEntry {
   final Map<String, dynamic> data;
   final DateTime expiresAt;
@@ -16,59 +15,46 @@ class _CachedJsonEntry {
 }
 
 class ApiService {
-  // Cloudflare Workers 二쇱냼
+  // Cloudflare Workers 주소
   static const String baseUrl = 'https://news-summarizer.bum2432.workers.dev';
   static const Duration _defaultCacheDuration = Duration(seconds: 30);
   static final Map<String, _CachedJsonEntry> _jsonCache = {};
   static final Map<String, Future<Map<String, dynamic>>> _pendingJson = {};
-
-  void _log(Object? message) {
-    if (kDebugMode) {
-      // ignore: avoid_print
-      print(message);
-    }
-  }
 
   static void _pruneCache() {
     final now = DateTime.now();
     _jsonCache.removeWhere((_, entry) => entry.expiresAt.isBefore(now));
   }
 
-  /// 理쒖떊 ?몃젋??紐⑸줉 媛?몄삤湲?  Future<List<TrendItem>> fetchTrends(
+  /// 최신 트렌드 목록 가져오기
+  Future<List<TrendItem>> fetchTrends(
       {int limit = 20, int offset = 0, String category = '', String sort = 'latest', String period = ''}) async {
     try {
-      _log('?뙋 Fetching from: $baseUrl/api/trends');
       final uri = Uri.parse('$baseUrl/api/trends?limit=$limit&offset=$offset'
           '&sort=${Uri.encodeComponent(sort)}'
           '${period.isNotEmpty ? '&period=${Uri.encodeComponent(period)}' : ''}'
           '${category.isNotEmpty ? '&category=${Uri.encodeComponent(category)}' : ''}');
-      _log('?뵕 Full URI: $uri');
       final response = await http.get(
         uri,
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        _log('??Response received: ${response.body.length} bytes');
         final jsonData = json.decode(utf8.decode(response.bodyBytes));
 
         if (jsonData['success'] == true) {
           final List<dynamic> trendsJson = jsonData['data'];
-          _log('??Parsed ${trendsJson.length} trends');
           return trendsJson.map((json) => TrendItem.fromJson(json)).toList();
         } else {
           throw Exception('API returned success=false');
         }
       } else {
-        _log('??HTTP Error: ${response.statusCode}');
         throw Exception('Failed to load trends: ${response.statusCode}');
       }
     } catch (e) {
-      _log('??Exception: $e');
       if (offset == 0) {
-        // 泥?濡쒕뱶 ?ㅽ뙣 ??mock ?곗씠??????먮윭瑜?throw?댁꽌 UI?먯꽌 泥섎━
-        _log('API Error: $e');
-        throw Exception('?쒕쾭???곌껐?????놁뒿?덈떎');
+        // 첫 로드 실패 시 mock 데이터 대신 에러를 throw해서 UI에서 처리
+        throw Exception('서버에 연결할 수 없습니다');
       }
       return [];
     }
@@ -264,7 +250,7 @@ class ApiService {
         .toList();
   }
 
-  /// ?뱀젙 ?몃젋???곸꽭 ?뺣낫 媛?몄삤湲?
+  /// 특정 트렌드 상세 정보 가져오기
   Future<TrendItem?> fetchTrendDetail(int id) async {
     try {
       final response = await http.get(
@@ -281,12 +267,11 @@ class ApiService {
       }
       return null;
     } catch (e) {
-      _log('API Error: $e');
       return null;
     }
   }
 
-  /// ?ㅼ?以꾨윭 ?곹깭 ?뺤씤
+  /// 스케줄러 상태 확인
   Future<Map<String, dynamic>> getSchedulerStatus() async {
     try {
       final response = await http.get(
@@ -299,7 +284,6 @@ class ApiService {
       }
       return {'status': 'error'};
     } catch (e) {
-      _log('API Error: $e');
       return {'status': 'offline'};
     }
   }
@@ -380,4 +364,3 @@ class ApiService {
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 }
-

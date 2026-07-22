@@ -28,6 +28,17 @@ class TrendItem {
     this.viewCount = 0,
   });
 
+  static String _normalizeThumbnailUrl(dynamic value) {
+    final raw = value?.toString().trim() ?? '';
+    if (raw.isEmpty) return '';
+    if (raw.startsWith('//')) return 'https:$raw';
+
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !uri.hasScheme) return '';
+
+    return uri.scheme.toLowerCase() == 'https' ? raw : '';
+  }
+
   /// JSON에서 TrendItem 객체 생성
   factory TrendItem.fromJson(Map<String, dynamic> json) {
     // id: int or null 모두 처리
@@ -70,7 +81,7 @@ class TrendItem {
       category: json['category'] as String? ?? '일반',
       link: json['link'] as String? ?? '',
       source: json['source'] as String? ?? 'Unknown',
-      thumbnailUrl: json['thumbnail_url'] as String? ?? '',
+      thumbnailUrl: _normalizeThumbnailUrl(json['thumbnail_url']),
       published: json['published'] as String? ?? json['created_at'] as String? ?? '', // 출간 시간 우선
       createdAt: json['created_at'] as String? ?? '',
       viewCount: (json['view_count'] as int?) ?? 0,
