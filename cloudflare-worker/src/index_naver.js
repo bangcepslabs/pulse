@@ -37,6 +37,8 @@ const VALID_CATEGORIES = ['경제', '세계', '사회', '정치', '생활/문화
 const MARKET_DATA_CACHE_TTL_MS = 45 * 1000;
 const SUPABASE_GET_CACHE_TTL_MS = 45 * 1000;
 const MARKET_DATA_CACHE = new Map();
+const PUBLIC_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const PUBLIC_RATE_LIMIT_BUCKETS = new Map();
 const SECURITY_RESPONSE_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -58,6 +60,11 @@ export default {
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
+    }
+
+    const rateLimitResult = enforcePublicRateLimit(request, path, corsHeaders);
+    if (rateLimitResult) {
+      return rateLimitResult;
     }
 
     try {
@@ -2163,6 +2170,96 @@ function jsonResponse(data, headers = {}, status = 200) {
       ...headers,
     },
   });
+}
+
+function enforcePublicRateLimit(request, path, corsHeaders) {
+  if (request.method !== 'GET') {
+    return null;
+  }
+
+  if (!shouldRateLimitPath(path)) {
+    return null;
+  }
+
+  const clientKey = getClientIdentifier(request);
+  const limit = getRateLimitForPath(path);
+  const now = Date.now();
+  const bucketKey = `${clientKey}:${path}`;
+  const bucket = PUBLIC_RATE_LIMIT_BUCKETS.get(bucketKey);
+
+  if (!bucket || bucket.resetAt <= now) {
+    PUBLIC_RATE_LIMIT_BUCKETS.set(bucketKey, {
+      count: 1,
+      resetAt: now + PUBLIC_RATE_LIMIT_WINDOW_MS,
+    });
+    pruneRateLimitBuckets(now);
+    return null;
+  }
+
+  if (bucket.count >= limit) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((bucket.resetAt - now) / 1000),
+    );
+    return jsonResponse(
+      {
+        success: false,
+        error: 'Too many requests',
+        retryAfter: retryAfterSeconds,
+      },
+      {
+        ...corsHeaders,
+        'Retry-After': String(retryAfterSeconds),
+        'Cache-Control': 'no-store',
+      },
+      429,
+    );
+  }
+
+  bucket.count += 1;
+  return null;
+}
+
+function shouldRateLimitPath(path) {
+  return (
+    path.startsWith('/api/news/search') ||
+    path.startsWith('/api/news/by-keyword') ||
+    path.startsWith('/api/trend/timeline') ||
+    path.startsWith('/api/trends/keywords') ||
+    path.startsWith('/api/trends/rising') ||
+    path.startsWith('/api/trends/sentiment') ||
+    path.startsWith('/api/market-data') ||
+    path.startsWith('/api/chart-data')
+  );
+}
+
+function getRateLimitForPath(path) {
+  if (path.startsWith('/api/market-data') || path.startsWith('/api/chart-data')) {
+    return 90;
+  }
+
+  if (path.startsWith('/api/news/search') || path.startsWith('/api/news/by-keyword')) {
+    return 30;
+  }
+
+  return 45;
+}
+
+function getClientIdentifier(request) {
+  return (
+    request.headers.get('cf-connecting-ip') ||
+    request.headers.get('x-forwarded-for') ||
+    request.headers.get('x-real-ip') ||
+    'anonymous'
+  );
+}
+
+function pruneRateLimitBuckets(now = Date.now()) {
+  for (const [key, bucket] of PUBLIC_RATE_LIMIT_BUCKETS.entries()) {
+    if (!bucket || bucket.resetAt <= now) {
+      PUBLIC_RATE_LIMIT_BUCKETS.delete(key);
+    }
+  }
 }
 
 function isDebugEndpointEnabled(env) {

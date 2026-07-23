@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../models/trend_insight.dart';
 import '../models/trend_item.dart';
 import '../services/api_service.dart';
@@ -310,6 +312,7 @@ class _LandingScreenState extends State<LandingScreen>
   String? _marketError;
   DateTime? _marketLastUpdatedAt;
   DateTime? _lastInsightRefreshAt;
+  DateTime? _lastBackPressedAt;
 
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
   Color get titleText => isDark ? Colors.white : const Color(0xFF0F172A);
@@ -369,41 +372,79 @@ class _LandingScreenState extends State<LandingScreen>
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
 
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: PulseUi.page(context),
-      drawer: isMobile ? _buildDrawer(context) : null,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildAppBar(isMobile),
-            _FadeInOnScroll(child: _buildPlatformHero(isMobile)),
-            _FadeInOnScroll(
-              delay: 70,
-              child: _buildBreakingNewsSection(isMobile),
-            ),
-            _FadeInOnScroll(
-              delay: 120,
-              child: _buildMarketMoodSection(isMobile),
-            ),
-            _FadeInOnScroll(
-              delay: 170,
-              child: _buildMarketOverviewSection(isMobile),
-            ),
-            _FadeInOnScroll(
-              delay: 220,
-              child: _buildPopularStocksSection(isMobile),
-            ),
-            _FadeInOnScroll(
-              delay: 270,
-              child: _buildMarketDominanceSection(isMobile),
-            ),
-            const SizedBox(height: 32),
-            _buildFooter(),
-          ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await _handleRootBackPressed(isMobile);
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: PulseUi.page(context),
+        drawer: isMobile ? _buildDrawer(context) : null,
+        body: SingleChildScrollView(
+          child: Column(
+            children: [
+              _buildAppBar(isMobile),
+              _FadeInOnScroll(child: _buildPlatformHero(isMobile)),
+              _FadeInOnScroll(
+                delay: 70,
+                child: _buildBreakingNewsSection(isMobile),
+              ),
+              _FadeInOnScroll(
+                delay: 120,
+                child: _buildMarketMoodSection(isMobile),
+              ),
+              _FadeInOnScroll(
+                delay: 170,
+                child: _buildMarketOverviewSection(isMobile),
+              ),
+              _FadeInOnScroll(
+                delay: 220,
+                child: _buildPopularStocksSection(isMobile),
+              ),
+              _FadeInOnScroll(
+                delay: 270,
+                child: _buildMarketDominanceSection(isMobile),
+              ),
+              const SizedBox(height: 32),
+              _buildFooter(),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _handleRootBackPressed(bool isMobile) async {
+    if (isMobile && (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    if (kIsWeb) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final shouldExit = _lastBackPressedAt != null &&
+        now.difference(_lastBackPressedAt!) <= const Duration(seconds: 2);
+    _lastBackPressedAt = now;
+
+    if (shouldExit) {
+      await SystemNavigator.pop();
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('한 번 더 누르면 앱이 종료됩니다.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
   }
 
   Widget _buildAppBar(bool isMobile) {
@@ -416,6 +457,7 @@ class _LandingScreenState extends State<LandingScreen>
         final sectorMood =
             insight == null ? '분석 대기' : _landingSectorMoodLabel(insight);
         final viewportWidth = MediaQuery.sizeOf(context).width;
+        final topInset = MediaQuery.paddingOf(context).top;
         final compactHeader = viewportWidth < 1080;
         final showFxSummary = viewportWidth >= 1400;
         final fxTargets = [
@@ -451,7 +493,9 @@ class _LandingScreenState extends State<LandingScreen>
               child: Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: 20,
-                  vertical: isMobile ? 12 : 14,
+                ).copyWith(
+                  top: (isMobile ? 10 : 12) + topInset,
+                  bottom: isMobile ? 12 : 14,
                 ),
                 child: Row(
                   children: [
@@ -615,7 +659,7 @@ class _LandingScreenState extends State<LandingScreen>
   }
 
   void _openPage(Widget page) {
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => page),
     );
   }
@@ -3095,7 +3139,7 @@ class _LandingScreenState extends State<LandingScreen>
             children: [
               _HoverButton(
                 onTap: () {
-                  Navigator.of(context).pushReplacement(
+                  Navigator.of(context).push(
                     MaterialPageRoute(builder: (context) => const HomeScreen()),
                   );
                 },

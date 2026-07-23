@@ -15,8 +15,11 @@ class _CachedJsonEntry {
 }
 
 class ApiService {
-  // Cloudflare Workers 주소
-  static const String baseUrl = 'https://news-summarizer.bum2432.workers.dev';
+  // 출시 환경에서는 --dart-define=PULSE_API_BASE_URL=... 로 덮어쓸 수 있습니다.
+  static const String baseUrl = String.fromEnvironment(
+    'PULSE_API_BASE_URL',
+    defaultValue: 'https://news-summarizer.bum2432.workers.dev',
+  );
   static const Duration _defaultCacheDuration = Duration(seconds: 30);
   static final Map<String, _CachedJsonEntry> _jsonCache = {};
   static final Map<String, Future<Map<String, dynamic>>> _pendingJson = {};

@@ -104,7 +104,7 @@ class AppDrawer extends StatelessWidget {
                       onTap: () {
                         Navigator.pop(context);
                         if (currentSection != DrawerSection.home) {
-                          Navigator.of(context).pushReplacement(
+                          Navigator.of(context).push(
                             MaterialPageRoute(builder: homeBuilder),
                           );
                         }
@@ -119,7 +119,7 @@ class AppDrawer extends StatelessWidget {
                       onTap: () {
                         Navigator.pop(context);
                         if (currentSection != DrawerSection.news) {
-                          Navigator.of(context).pushReplacement(
+                          Navigator.of(context).push(
                             MaterialPageRoute(builder: newsBuilder),
                           );
                         }
@@ -134,7 +134,7 @@ class AppDrawer extends StatelessWidget {
                       onTap: () {
                         Navigator.pop(context);
                         if (currentSection != DrawerSection.fearGreed) {
-                          Navigator.of(context).pushReplacement(
+                          Navigator.of(context).push(
                             MaterialPageRoute(builder: fearGreedBuilder),
                           );
                         }
@@ -149,7 +149,7 @@ class AppDrawer extends StatelessWidget {
                       onTap: () {
                         Navigator.pop(context);
                         if (currentSection != DrawerSection.market) {
-                          Navigator.of(context).pushReplacement(
+                          Navigator.of(context).push(
                             MaterialPageRoute(builder: marketBuilder),
                           );
                         }

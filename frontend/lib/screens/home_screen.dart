@@ -3282,7 +3282,7 @@ class _AppDrawer extends StatelessWidget {
                       subtitle: '랜딩 페이지로',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.of(context).pushReplacement(
+                        Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => const LandingScreen(),
                           ),
@@ -4584,10 +4584,10 @@ class _ErrorView extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                   color: primaryText)),
           const SizedBox(height: 8),
-          Text('https://news-summarizer.bum2432.workers.dev',
+          Text('네트워크 또는 서버 상태를 확인하고 있습니다.',
               style: TextStyle(fontSize: 13, color: secondaryText)),
           const SizedBox(height: 4),
-          Text('Ollama 분석 완료 후 자동 로드됩니다',
+          Text('잠시 후 자동으로 다시 시도합니다.',
               style: TextStyle(fontSize: 12, color: secondaryText)),
           const SizedBox(height: 24),
           const SizedBox(
