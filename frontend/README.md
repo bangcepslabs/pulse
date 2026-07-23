@@ -1,17 +1,52 @@
-# bang_project_frontend
+# Pulse Frontend
 
-A new Flutter project.
+Flutter frontend for Pulse.
 
-## Getting Started
+## Main screens
 
-This project is a starting point for a Flutter application.
+- landing dashboard
+- real-time news
+- fear and greed
+- market page
 
-A few resources to get you started if this is your first Flutter project:
+## Run
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```powershell
+flutter pub get
+flutter run -d chrome
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Run with explicit production API:
+
+```powershell
+flutter run -d chrome --dart-define=PULSE_API_BASE_URL=https://news-summarizer.bum2432.workers.dev
+```
+
+## Release builds
+
+App Bundle:
+
+```powershell
+flutter build appbundle --release --dart-define=PULSE_API_BASE_URL=https://news-summarizer.bum2432.workers.dev
+```
+
+APK:
+
+```powershell
+flutter build apk --release --dart-define=PULSE_API_BASE_URL=https://news-summarizer.bum2432.workers.dev
+```
+
+## Important files
+
+- `lib/main.dart`: app entry
+- `lib/screens/landing_screen.dart`: landing dashboard
+- `lib/screens/home_screen.dart`: real-time news
+- `lib/screens/fear_greed_page.dart`: fear and greed
+- `lib/screens/market_page.dart`: market page
+- `lib/services/api_service.dart`: API client
+
+## Notes
+
+- API base URL can be injected via `PULSE_API_BASE_URL`.
+- Thumbnails use the shared `NetworkThumbnail` widget.
+- Mobile root back behavior is handled separately on the landing screen.
