@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ContactPage extends StatelessWidget {
-  static const String supportEmail = 'bangcepslabs@gmail.com';
+  static const String supportEmail = 'bum2432@gmail.com';
   static const String websiteUrl = 'https://bangcepslabs.github.io/pulse/';
   static const String privacyUrl =
       'https://bangcepslabs.github.io/pulse/privacy.html';
