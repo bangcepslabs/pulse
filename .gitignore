@@ -42,6 +42,11 @@ pubspec.lock
 *.swp
 *.swo
 
+# Codex local files
+.codex/
+.agents/
+run-codex.ps1
+
 # Logs
 *.log
 

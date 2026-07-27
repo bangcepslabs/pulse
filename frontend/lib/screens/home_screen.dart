@@ -173,6 +173,19 @@ String _sourceDisplayName(TrendItem trend) {
   return _publisherLabel(source);
 }
 
+String? _sourceDomainLabel(String url) {
+  final value = url.trim();
+  if (value.isEmpty) return null;
+  final uri = Uri.tryParse(value);
+  final host = uri?.host.trim() ?? '';
+  if (host.isEmpty) return null;
+  return host.startsWith('www.') ? host.substring(4) : host;
+}
+
+String _sourceLinkLabel(TrendItem trend) {
+  return _sourceDomainLabel(trend.link) ?? _sourceDisplayName(trend);
+}
+
 // ════════════════════════════════════════════════
 // HomeScreen
 // ════════════════════════════════════════════════
@@ -3144,7 +3157,7 @@ class _MajorNewsCard extends StatelessWidget {
                       if (trend.importance >= 4) const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          _sourceDisplayName(trend),
+                          '출처: ${_sourceLinkLabel(trend)}',
                           style: TextStyle(
                             fontSize: 10.5,
                             color: mutedText,
@@ -4150,7 +4163,7 @@ class _NewsListRowState extends State<_NewsListRow> {
                         children: [
                           Expanded(
                             child: Text(
-                              publisher,
+                              '출처: $publisher',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -4241,6 +4254,8 @@ class _DetailSheet extends StatelessWidget {
     final catColor = _catColor(trend.category);
     final publishedLabel =
         trend.published.trim().isEmpty ? '' : _timeAgo(trend.published);
+    final sourceLink = _sourceLinkLabel(trend);
+    const double metaFontSize = 11.5;
 
     return GestureDetector(
       onTap: () => Navigator.pop(context), // 바깥 영역 클릭 시 닫기
@@ -4358,10 +4373,10 @@ class _DetailSheet extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        _sourceDisplayName(trend),
+                        '출처: $sourceLink',
                         style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white : subtleText,
+                          fontSize: metaFontSize,
+                          color: subtleText,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -4369,7 +4384,7 @@ class _DetailSheet extends StatelessWidget {
                         Text(
                           _timeAgo(trend.published),
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: metaFontSize,
                             color: isDark ? Colors.grey.shade100 : subtleText,
                             fontWeight: FontWeight.w600,
                           ),

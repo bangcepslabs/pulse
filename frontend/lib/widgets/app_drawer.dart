@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../screens/contact_page.dart';
 import '../services/theme_controller.dart';
 
 enum DrawerSection {
@@ -83,7 +84,7 @@ class AppDrawer extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      '실시간 분석 대시보드',
+                      '실시간 뉴스와 시장 흐름을 빠르게 확인합니다.',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.white70,
@@ -94,7 +95,10 @@ class AppDrawer extends StatelessWidget {
               ),
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                   children: [
                     _DrawerMenuItem(
                       icon: Icons.home_rounded,
@@ -110,11 +114,11 @@ class AppDrawer extends StatelessWidget {
                         }
                       },
                     ),
-                    const Divider(height: 1),
+                    const SizedBox(height: 6),
                     _DrawerMenuItem(
                       icon: Icons.newspaper_rounded,
-                      title: '실시간뉴스',
-                      subtitle: '최신 뉴스',
+                      title: '실시간 뉴스',
+                      subtitle: '최신 뉴스와 인기 기사',
                       current: currentSection == DrawerSection.news,
                       onTap: () {
                         Navigator.pop(context);
@@ -125,11 +129,11 @@ class AppDrawer extends StatelessWidget {
                         }
                       },
                     ),
-                    const Divider(height: 1),
+                    const SizedBox(height: 6),
                     _DrawerMenuItem(
                       icon: Icons.psychology_rounded,
                       title: '공포탐욕지수',
-                      subtitle: '시장 심리',
+                      subtitle: '시장 심리 지표',
                       current: currentSection == DrawerSection.fearGreed,
                       onTap: () {
                         Navigator.pop(context);
@@ -140,7 +144,7 @@ class AppDrawer extends StatelessWidget {
                         }
                       },
                     ),
-                    const Divider(height: 1),
+                    const SizedBox(height: 6),
                     _DrawerMenuItem(
                       icon: Icons.show_chart_rounded,
                       title: '증시',
@@ -155,49 +159,62 @@ class AppDrawer extends StatelessWidget {
                         }
                       },
                     ),
-                    const Divider(height: 1),
+                    const SizedBox(height: 6),
+                    _DrawerMenuItem(
+                      icon: Icons.support_agent_rounded,
+                      title: '문의 및 운영 정보',
+                      subtitle: '이메일, 웹사이트, 개인정보처리방침',
+                      current: false,
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ContactPage(),
+                          ),
+                        );
+                      },
+                    ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+                      padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
                       child: Text(
                         '테마',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
                         ),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ValueListenableBuilder<ThemeMode>(
-                        valueListenable: ThemeController.instance.mode,
-                        builder: (context, themeMode, _) {
-                          return Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _ThemeChoiceChip(
-                                label: '시스템',
-                                selected: themeMode == ThemeMode.system,
-                                onTap: () => ThemeController.instance
-                                    .setThemeMode(ThemeMode.system),
-                              ),
-                              _ThemeChoiceChip(
-                                label: '라이트',
-                                selected: themeMode == ThemeMode.light,
-                                onTap: () => ThemeController.instance
-                                    .setThemeMode(ThemeMode.light),
-                              ),
-                              _ThemeChoiceChip(
-                                label: '다크',
-                                selected: themeMode == ThemeMode.dark,
-                                onTap: () => ThemeController.instance
-                                    .setThemeMode(ThemeMode.dark),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
+                    ValueListenableBuilder<ThemeMode>(
+                      valueListenable: ThemeController.instance.mode,
+                      builder: (context, themeMode, _) {
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _ThemeChoiceChip(
+                              label: '시스템',
+                              selected: themeMode == ThemeMode.system,
+                              onTap: () => ThemeController.instance
+                                  .setThemeMode(ThemeMode.system),
+                            ),
+                            _ThemeChoiceChip(
+                              label: '라이트',
+                              selected: themeMode == ThemeMode.light,
+                              onTap: () => ThemeController.instance
+                                  .setThemeMode(ThemeMode.light),
+                            ),
+                            _ThemeChoiceChip(
+                              label: '다크',
+                              selected: themeMode == ThemeMode.dark,
+                              onTap: () => ThemeController.instance
+                                  .setThemeMode(ThemeMode.dark),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -207,7 +224,9 @@ class AppDrawer extends StatelessWidget {
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(
-                      color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                      color: isDark
+                          ? Colors.grey.shade800
+                          : Colors.grey.shade200,
                     ),
                   ),
                 ),
@@ -220,7 +239,7 @@ class AppDrawer extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Version 1.0.0',
+                      'Contact: ${ContactPage.supportEmail}',
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark ? Colors.grey.shade400 : Colors.grey[600],
@@ -260,7 +279,9 @@ class _DrawerMenuItem extends StatelessWidget {
     final activeText = isDark ? Colors.white : Colors.black87;
     final inactiveText = isDark ? Colors.grey.shade300 : Colors.black87;
     return Material(
-      color: current ? activeBg : (isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC)),
+      color: current
+          ? activeBg
+          : (isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC)),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -308,7 +329,9 @@ class _DrawerMenuItem extends StatelessWidget {
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: isDark
                                   ? const Color(0xFF172554)
@@ -334,7 +357,9 @@ class _DrawerMenuItem extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 11.5,
-                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
                       ),
                     ),
                   ],
@@ -343,7 +368,8 @@ class _DrawerMenuItem extends StatelessWidget {
               const SizedBox(width: 8),
               Icon(
                 Icons.chevron_right_rounded,
-                color: isDark ? Colors.grey.shade500 : Colors.blueGrey.shade300,
+                color:
+                    isDark ? Colors.grey.shade500 : Colors.blueGrey.shade300,
               ),
             ],
           ),
@@ -378,7 +404,8 @@ class _ThemeChoiceChip extends StatelessWidget {
             ? (isDark ? const Color(0xFF08111F) : Colors.white)
             : (isDark ? Colors.grey.shade200 : Colors.blueGrey.shade700),
       ),
-      selectedColor: isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
+      selectedColor:
+          isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
       backgroundColor: isDark ? const Color(0xFF111827) : Colors.grey.shade100,
       side: BorderSide(
         color: selected

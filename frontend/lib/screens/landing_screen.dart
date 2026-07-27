@@ -12,6 +12,7 @@ import '../utils/news_grouping.dart';
 import '../widgets/network_thumbnail.dart';
 import 'home_screen.dart';
 import 'fear_greed_page.dart';
+import 'contact_page.dart';
 import './market_page.dart';
 import 'dart:convert';
 import 'dart:async';
@@ -264,6 +265,15 @@ String? _landingSourceLabel(String source) {
   return value;
 }
 
+String? _landingSourceDomainLabel(String url) {
+  final value = url.trim();
+  if (value.isEmpty) return null;
+  final uri = Uri.tryParse(value);
+  final host = uri?.host.trim() ?? '';
+  if (host.isEmpty) return null;
+  return host.startsWith('www.') ? host.substring(4) : host;
+}
+
 Future<void> _landingOpenArticle(BuildContext context, String url) async {
   final uri = Uri.tryParse(url.trim());
   if (uri == null) return;
@@ -371,17 +381,18 @@ class _LandingScreenState extends State<LandingScreen>
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
+    final useDrawerNavigation = screenWidth < 1080;
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        await _handleRootBackPressed(isMobile);
+        await _handleRootBackPressed(useDrawerNavigation);
       },
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: PulseUi.page(context),
-        drawer: isMobile ? _buildDrawer(context) : null,
+        drawer: useDrawerNavigation ? _buildDrawer(context) : null,
         body: SingleChildScrollView(
           child: Column(
             children: [
@@ -416,8 +427,9 @@ class _LandingScreenState extends State<LandingScreen>
     );
   }
 
-  Future<void> _handleRootBackPressed(bool isMobile) async {
-    if (isMobile && (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
+  Future<void> _handleRootBackPressed(bool useDrawerNavigation) async {
+    if (useDrawerNavigation &&
+        (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
       Navigator.of(context).pop();
       return;
     }
@@ -818,6 +830,18 @@ class _LandingScreenState extends State<LandingScreen>
                       onTap: () {
                         Navigator.pop(context);
                         _openPage(const MarketPage());
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    _buildDrawerNavTile(
+                      context: context,
+                      isDark: isDark,
+                      icon: Icons.support_agent_rounded,
+                      title: '문의 및 운영 정보',
+                      subtitle: '이메일, 웹사이트, 개인정보처리방침',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _openPage(const ContactPage());
                       },
                     ),
                   ],
@@ -1461,16 +1485,32 @@ class _LandingScreenState extends State<LandingScreen>
                     ),
                   )
                 else
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: isMobile ? 2 : 4,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    childAspectRatio: isMobile ? 1.45 : 1.95,
-                    children: targets
-                        .map((quote) => _LandingMarketSummaryCard(quote: quote))
-                        .toList(),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = constraints.maxWidth;
+                      final crossAxisCount = width < 720
+                          ? 2
+                          : width < 1040
+                              ? 3
+                              : 4;
+                      final aspectRatio = width < 720
+                          ? 1.42
+                          : width < 1040
+                              ? 1.55
+                              : 1.78;
+                      return GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: crossAxisCount,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                        childAspectRatio: aspectRatio,
+                        children: targets
+                            .map((quote) =>
+                                _LandingMarketSummaryCard(quote: quote))
+                            .toList(),
+                      );
+                    },
                   ),
               ],
             ),
@@ -5547,6 +5587,7 @@ class _BreakingNewsTimelineTile extends StatelessWidget {
     final dateTime = _landingTryParseDate(
       item.published.isNotEmpty ? item.published : item.createdAt,
     );
+    final source = item.source.trim().isEmpty ? '언론사' : item.source.trim();
     final timeLabel = _landingClockLabel(dateTime);
     final relativeLabel = _landingRelativeTimeLabel(dateTime);
     final category =
@@ -5669,6 +5710,19 @@ class _BreakingNewsTimelineTile extends StatelessWidget {
                             fontSize: 15,
                             height: 1.35,
                             fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '출처: $source',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: isDark
+                                ? Colors.grey.shade300
+                                : Colors.blueGrey.shade600,
                           ),
                         ),
                       ],
@@ -5912,6 +5966,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
     final item = widget.cluster.representative;
     final hasLink = item.link.trim().isNotEmpty;
     final source = item.source.trim().isEmpty ? 'News' : item.source.trim();
+    final sourceDomain = _landingSourceDomainLabel(item.link);
     final category =
         item.category.trim().isEmpty ? 'General' : item.category.trim();
     final timeLabel = _landingCompactTime(
@@ -6013,7 +6068,7 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                source,
+                                '출처 $source',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -6089,7 +6144,10 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                           ),
                         ],
                         const SizedBox(height: 12),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -6113,7 +6171,6 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4),
@@ -6134,8 +6191,20 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                                 ),
                               ),
                             ),
-                            if (extraCount > 0) ...[
-                              const Spacer(),
+                            if (sourceDomain != null)
+                              Text(
+                                '원문 링크 $sourceDomain',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.grey.shade400
+                                      : Colors.blueGrey.shade500,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            if (extraCount > 0)
                               Text(
                                 '외 $extraCount건',
                                 style: TextStyle(
@@ -6146,7 +6215,6 @@ class _LandingGroupedNewsTileState extends State<_LandingGroupedNewsTile> {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                            ],
                           ],
                         ),
                       ],
@@ -6182,6 +6250,7 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
     final item = widget.item;
     final hasLink = item.link.trim().isNotEmpty;
     final source = item.source.trim().isEmpty ? 'News' : item.source.trim();
+    final sourceDomain = _landingSourceDomainLabel(item.link);
     final category =
         item.category.trim().isEmpty ? 'General' : item.category.trim();
     final timeLabel = _landingCompactTime(
@@ -6282,7 +6351,7 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                source,
+                                '출처 $source',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -6360,7 +6429,10 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                           ),
                         ],
                         const SizedBox(height: 12),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -6385,14 +6457,54 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                                     style: TextStyle(
                                       color: Colors.blue.shade700,
                                       fontSize: 11.5,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ],
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              '출처 $source',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: isDark
+                                    ? Colors.grey.shade300
+                                    : Colors.blueGrey.shade600,
                               ),
                             ),
-                            if (hasLink) ...[
-                              const Spacer(),
+                            Text(
+                              timeLabel,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: isDark
+                                    ? Colors.grey.shade400
+                                    : Colors.blueGrey.shade500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                            if (sourceDomain != null)
+                              Text(
+                                '원문 링크 $sourceDomain',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.grey.shade400
+                                      : Colors.blueGrey.shade500,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            if (hasLink)
                               AnimatedContainer(
                                 duration: const Duration(milliseconds: 170),
                                 curve: Curves.easeOut,
@@ -6435,7 +6547,6 @@ class _LandingSearchResultTileState extends State<_LandingSearchResultTile> {
                                   ],
                                 ),
                               ),
-                            ],
                           ],
                         ),
                       ],
@@ -7395,6 +7506,7 @@ class _LandingMarketRankRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final compact = MediaQuery.sizeOf(context).width < 900;
     final up = quote.percentChange >= 0;
     final changeColor = quote.percentChange == 0
         ? (isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500)
@@ -7965,6 +8077,7 @@ class _LandingMarketSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final compact = MediaQuery.sizeOf(context).width < 900;
     final up = quote.percentChange >= 0;
     final accent = up
         ? (isDark ? Colors.red.shade300 : Colors.red.shade600)
@@ -7992,7 +8105,10 @@ class _LandingMarketSummaryCard extends StatelessWidget {
             : _landingMarketStageLabel(quote);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 9 : 10,
+        vertical: compact ? 6 : 7,
+      ),
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(12),
@@ -8006,12 +8122,12 @@ class _LandingMarketSummaryCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 12.0,
+              fontSize: compact ? 11.4 : 12.0,
               fontWeight: FontWeight.w800,
               color: textColor,
             ),
           ),
-          const SizedBox(height: 3),
+          SizedBox(height: compact ? 2 : 3),
           Row(
             children: [
               Expanded(
@@ -8022,14 +8138,14 @@ class _LandingMarketSummaryCard extends StatelessWidget {
                     formattedPrice,
                     maxLines: 1,
                     style: TextStyle(
-                      fontSize: 17.0,
+                      fontSize: compact ? 15.4 : 17.0,
                       fontWeight: FontWeight.w900,
                       color: textColor,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: compact ? 6 : 8),
               Flexible(
                 fit: FlexFit.loose,
                 child: FittedBox(
@@ -8042,14 +8158,14 @@ class _LandingMarketSummaryCard extends StatelessWidget {
                         up
                             ? Icons.arrow_upward_rounded
                             : Icons.arrow_downward_rounded,
-                        size: 13,
+                        size: compact ? 12 : 13,
                         color: accent,
                       ),
-                      const SizedBox(width: 3),
+                      SizedBox(width: compact ? 2 : 3),
                       Text(
                         _landingFormatPercent(quote.percentChange),
                         style: TextStyle(
-                          fontSize: 10.8,
+                          fontSize: compact ? 10.1 : 10.8,
                           fontWeight: FontWeight.w800,
                           color: accent,
                         ),
@@ -8060,20 +8176,20 @@ class _LandingMarketSummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 3),
+          SizedBox(height: compact ? 2 : 3),
           Text(
             stageLine,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 9.4,
+              fontSize: compact ? 8.8 : 9.4,
               fontWeight: FontWeight.w700,
               color: muted,
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: compact ? 4 : 6),
           SizedBox(
-            height: 18,
+            height: compact ? 14 : 18,
             child: _LandingSparkline(
               values: quote.chartData,
               color: accent,
