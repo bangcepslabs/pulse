@@ -16,6 +16,7 @@ import 'contact_page.dart';
 import './market_page.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 
 String _landingTimeLabel() {
@@ -308,8 +309,13 @@ class LandingScreen extends StatefulWidget {
 class _LandingScreenState extends State<LandingScreen>
     with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _editionSectionKey = GlobalKey();
+  final GlobalKey _updatesSectionKey = GlobalKey();
+  final GlobalKey _marketSectionKey = GlobalKey();
   final ApiService _api = ApiService();
   final TextEditingController _searchController = TextEditingController();
+  late Future<DailyEditionSnapshot> _editionFuture;
   late Future<TrendInsightSnapshot> _insightFuture;
   late Future<List<IssueTimelineItem>> _timelineFuture;
   late Future<List<TrendItem>> _latestNewsFuture;
@@ -350,6 +356,7 @@ class _LandingScreenState extends State<LandingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _editionFuture = _api.fetchDailyEdition();
     _insightFuture = _api.fetchTrendInsights();
     _timelineFuture =
         _api.fetchTrendTimeline(period: '24h', limit: 3, minScore: 45);
@@ -366,6 +373,7 @@ class _LandingScreenState extends State<LandingScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _marketRefreshTimer?.cancel();
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -394,13 +402,20 @@ class _LandingScreenState extends State<LandingScreen>
         backgroundColor: PulseUi.page(context),
         drawer: useDrawerNavigation ? _buildDrawer(context) : null,
         body: SingleChildScrollView(
+          controller: _scrollController,
           child: Column(
             children: [
               _buildAppBar(isMobile),
-              _FadeInOnScroll(child: _buildPlatformHero(isMobile)),
+              KeyedSubtree(
+                key: _editionSectionKey,
+                child: _FadeInOnScroll(child: _buildPlatformHero(isMobile)),
+              ),
               _FadeInOnScroll(
                 delay: 70,
-                child: _buildBreakingNewsSection(isMobile),
+                child: KeyedSubtree(
+                  key: _updatesSectionKey,
+                  child: _buildBreakingNewsSection(isMobile),
+                ),
               ),
               _FadeInOnScroll(
                 delay: 120,
@@ -408,14 +423,21 @@ class _LandingScreenState extends State<LandingScreen>
               ),
               _FadeInOnScroll(
                 delay: 170,
-                child: _buildMarketOverviewSection(isMobile),
+                child: KeyedSubtree(
+                  key: _marketSectionKey,
+                  child: _buildMarketOverviewSection(isMobile),
+                ),
               ),
               _FadeInOnScroll(
                 delay: 220,
+                child: _buildExchangeRateSection(isMobile),
+              ),
+              _FadeInOnScroll(
+                delay: 250,
                 child: _buildPopularStocksSection(isMobile),
               ),
               _FadeInOnScroll(
-                delay: 270,
+                delay: 300,
                 child: _buildMarketDominanceSection(isMobile),
               ),
               const SizedBox(height: 32),
@@ -424,6 +446,17 @@ class _LandingScreenState extends State<LandingScreen>
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _scrollToSection(GlobalKey key) async {
+    final context = key.currentContext;
+    if (context == null) return;
+    await Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+      alignment: 0.04,
     );
   }
 
@@ -601,18 +634,20 @@ class _LandingScreenState extends State<LandingScreen>
                                   ),
                       ),
                       const SizedBox(width: 18),
+                      _navItem('오늘', () => _scrollToSection(_editionSectionKey)),
+                      const SizedBox(width: 24),
                       _navItem(
-                        '실시간 뉴스',
+                        '업데이트',
+                        () => _scrollToSection(_updatesSectionKey),
+                      ),
+                      const SizedBox(width: 24),
+                      _navItem(
+                        '전체 뉴스',
                         () => _openPage(const HomeScreen()),
                       ),
                       const SizedBox(width: 24),
                       _navItem(
-                        '공포탐욕지수',
-                        () => _openPage(const FearGreedPage()),
-                      ),
-                      const SizedBox(width: 24),
-                      _navItem(
-                        '증시',
+                        '시장',
                         () => _openPage(const MarketPage()),
                       ),
                       const SizedBox(width: 12),
@@ -790,8 +825,8 @@ class _LandingScreenState extends State<LandingScreen>
                       context: context,
                       isDark: isDark,
                       icon: Icons.home,
-                      title: 'Pulse',
-                      subtitle: '메인 화면',
+                      title: '오늘',
+                      subtitle: '데일리 에디션',
                       onTap: () {
                         Navigator.pop(context);
                       },
@@ -801,8 +836,8 @@ class _LandingScreenState extends State<LandingScreen>
                       context: context,
                       isDark: isDark,
                       icon: Icons.newspaper_rounded,
-                      title: '실시간 뉴스',
-                      subtitle: '최신 뉴스',
+                      title: '전체 뉴스',
+                      subtitle: '카테고리별 기사 보기',
                       onTap: () {
                         Navigator.pop(context);
                         _openPage(const HomeScreen());
@@ -813,8 +848,8 @@ class _LandingScreenState extends State<LandingScreen>
                       context: context,
                       isDark: isDark,
                       icon: Icons.psychology_rounded,
-                      title: '공포탐욕지수',
-                      subtitle: '시장 심리',
+                      title: '시장 심리',
+                      subtitle: '공포탐욕지수',
                       onTap: () {
                         Navigator.pop(context);
                         _openPage(const FearGreedPage());
@@ -825,8 +860,8 @@ class _LandingScreenState extends State<LandingScreen>
                       context: context,
                       isDark: isDark,
                       icon: Icons.show_chart_rounded,
-                      title: '증시',
-                      subtitle: '주요 시장 데이터',
+                      title: '시장',
+                      subtitle: '지수, 환율, 종목 보기',
                       onTap: () {
                         Navigator.pop(context);
                         _openPage(const MarketPage());
@@ -978,11 +1013,27 @@ class _LandingScreenState extends State<LandingScreen>
   }
 
   Widget _buildPlatformHero(bool isMobile) {
-    return FutureBuilder<TrendInsightSnapshot>(
-      future: _insightFuture,
+    return FutureBuilder<List<dynamic>>(
+      future: Future.wait<dynamic>([
+        _editionFuture,
+        _insightFuture,
+        _timelineFuture,
+        _latestNewsFuture,
+      ]),
       builder: (context, snapshot) {
         final isLoading = snapshot.connectionState == ConnectionState.waiting;
-        final insight = snapshot.data;
+        final edition = snapshot.hasData
+            ? snapshot.data![0] as DailyEditionSnapshot?
+            : null;
+        final insight = snapshot.hasData
+            ? snapshot.data![1] as TrendInsightSnapshot?
+            : null;
+        final timelineItems = snapshot.hasData
+            ? (snapshot.data![2] as List<IssueTimelineItem>? ?? const [])
+            : const <IssueTimelineItem>[];
+        final latestNews = snapshot.hasData
+            ? (snapshot.data![3] as List<TrendItem>? ?? const [])
+            : const <TrendItem>[];
 
         return Center(
           child: ConstrainedBox(
@@ -992,12 +1043,18 @@ class _LandingScreenState extends State<LandingScreen>
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
               child: _LandingTrendPanel(
                 isLoading: isLoading,
+                edition: edition,
                 insight: insight,
+                timelineItems: timelineItems,
+                latestNews: latestNews,
                 searchController: _searchController,
                 onRefresh: _refreshInsights,
                 onSearch: _submitLandingSearch,
                 onKeywordTap: _searchLandingKeyword,
                 onRisingIssueTap: _searchLandingRisingIssue,
+                onEditionHeadlineTap: _openLandingEditionIssue,
+                onTimelineHeadlineTap: _openLandingTimelineItem,
+                onNewsHeadlineTap: _openLandingTrendItemArticle,
               ),
             ),
           ),
@@ -1017,6 +1074,7 @@ class _LandingScreenState extends State<LandingScreen>
     _insightRefreshing = true;
     try {
       setState(() {
+        _editionFuture = _api.fetchDailyEdition();
         _insightFuture = _api.fetchTrendInsights();
         _timelineFuture =
             _api.fetchTrendTimeline(period: '24h', limit: 3, minScore: 45);
@@ -1028,6 +1086,59 @@ class _LandingScreenState extends State<LandingScreen>
     } finally {
       _insightRefreshing = false;
     }
+  }
+
+  void _openLandingEditionIssue(EditionIssue issue) {
+    _showLandingRelatedArticlesSheet(
+      title: issue.title,
+      future: _resolveEditionRelatedNews(issue),
+    );
+  }
+
+  Future<List<TrendItem>> _resolveEditionRelatedNews(EditionIssue issue) async {
+    try {
+      final issueItems = await _api.fetchIssueTimelineNews(
+        issueId: issue.id,
+        keyword: issue.keyword,
+        newsIds: issue.newsIds,
+      );
+      if (issueItems.isNotEmpty) {
+        return issueItems;
+      }
+    } catch (_) {}
+
+    final fallbackQueries = <String>{
+      issue.keyword.trim(),
+      issue.title.trim(),
+    }.where((value) => value.isNotEmpty).toList();
+
+    final merged = <String, TrendItem>{};
+    for (final query in fallbackQueries) {
+      try {
+        final items = await _api.searchNews(
+          query: query,
+          sort: 'latest',
+          period: '24h',
+          limit: 12,
+        );
+        for (final item in items) {
+          final key = item.id > 0
+              ? 'id:${item.id}'
+              : [
+                  item.link.trim(),
+                  item.koreanTitle.trim(),
+                  item.source.trim(),
+                  item.published.trim(),
+                ].join('|');
+          merged.putIfAbsent(key, () => item);
+        }
+      } catch (_) {}
+      if (merged.length >= 8) {
+        break;
+      }
+    }
+
+    return merged.values.toList();
   }
 
   bool _shouldRefreshMarketData() {
@@ -1081,23 +1192,14 @@ class _LandingScreenState extends State<LandingScreen>
 
   Widget _buildBreakingNewsSection(bool isMobile) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final maxItems = 5;
-    return FutureBuilder<List<TrendItem>>(
-      future: _latestNewsFuture,
+    final maxItems = isMobile ? 4 : 5;
+    return FutureBuilder<List<IssueTimelineItem>>(
+      future: _timelineFuture,
       builder: (context, snapshot) {
         final loading = snapshot.connectionState == ConnectionState.waiting;
-        final rawItems = (snapshot.data ?? const <TrendItem>[]).toList()
-          ..sort((a, b) {
-            final ai = _landingNewsPriorityRank(a);
-            final bi = _landingNewsPriorityRank(b);
-            if (ai != bi) return ai.compareTo(bi);
-            final aDate =
-                _landingTrendDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-            final bDate =
-                _landingTrendDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
-            return bDate.compareTo(aDate);
-          });
-        final items = rawItems.take(maxItems).toList();
+        final items = (snapshot.data ?? const <IssueTimelineItem>[])
+            .take(maxItems)
+            .toList();
 
         return Center(
           child: ConstrainedBox(
@@ -1113,8 +1215,8 @@ class _LandingScreenState extends State<LandingScreen>
                   children: [
                     PulseSectionHeader(
                       icon: Icons.bolt_rounded,
-                      title: '실시간 속보',
-                      subtitle: '방금 들어온 뉴스를 최신순으로 확인하세요',
+                      title: '어젯밤 달라진 것',
+                      subtitle: '전날 저녁부터 아침까지 바뀐 핵심 이슈만 묶어 보여줍니다',
                       trailing: TextButton(
                         onPressed: () => _openPage(const HomeScreen()),
                         style: TextButton.styleFrom(
@@ -1127,7 +1229,7 @@ class _LandingScreenState extends State<LandingScreen>
                           minimumSize: Size.zero,
                         ),
                         child: const Text(
-                          '더 보기 →',
+                          '전체 뉴스 →',
                           style: TextStyle(
                               fontSize: 12, fontWeight: FontWeight.w800),
                         ),
@@ -1145,7 +1247,7 @@ class _LandingScreenState extends State<LandingScreen>
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         child: Text(
-                          '아직 불러온 속보가 없습니다.',
+                          '아직 오늘 아침판에 담을 변화가 충분하지 않습니다.',
                           style: TextStyle(
                             fontSize: 12,
                             color: isDark
@@ -1158,13 +1260,9 @@ class _LandingScreenState extends State<LandingScreen>
                       Column(
                         children: [
                           for (int i = 0; i < items.length; i++) ...[
-                            _BreakingNewsTimelineTile(
+                            _LandingEditionUpdateTile(
                               item: items[i],
-                              isFeatured: i == 0,
-                              isRead: _readNewsIds.contains(items[i].id),
-                              onTap: items[i].link.trim().isNotEmpty
-                                  ? () => _openLandingTrendItemArticle(items[i])
-                                  : null,
+                              onTap: () => _openLandingTimelineItem(items[i]),
                             ),
                             if (i != items.length - 1)
                               Divider(
@@ -1272,7 +1370,7 @@ class _LandingScreenState extends State<LandingScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '시장 분위기',
+                                '오늘 체크할 흐름',
                                 style: TextStyle(
                                   fontSize: 13.8,
                                   fontWeight: FontWeight.w800,
@@ -1409,7 +1507,7 @@ class _LandingScreenState extends State<LandingScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '지금 시장',
+                            '시장 한눈에',
                             style: TextStyle(
                               fontSize: 13.8,
                               fontWeight: FontWeight.w800,
@@ -1488,13 +1586,17 @@ class _LandingScreenState extends State<LandingScreen>
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final width = constraints.maxWidth;
-                      final crossAxisCount = width < 720
+                      final crossAxisCount = width < 560
+                          ? 2
+                          : width < 720
                           ? 2
                           : width < 1040
                               ? 3
                               : 4;
-                      final aspectRatio = width < 720
-                          ? 1.42
+                      final aspectRatio = width < 560
+                          ? 1.18
+                          : width < 720
+                          ? 1.32
                           : width < 1040
                               ? 1.55
                               : 1.78;
@@ -1576,7 +1678,7 @@ class _LandingScreenState extends State<LandingScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '환율',
+                            '환율 체크',
                             style: TextStyle(
                               fontSize: 13.8,
                               fontWeight: FontWeight.w800,
@@ -1737,7 +1839,7 @@ class _LandingScreenState extends State<LandingScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '24시간 가격 변동 종목',
+                            '대표 종목 흐름',
                             style: TextStyle(
                               fontSize: 13.8,
                               fontWeight: FontWeight.w800,
@@ -1807,7 +1909,7 @@ class _LandingScreenState extends State<LandingScreen>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '최근 24시간 변동률 기준으로 큰 움직임이 있었던 종목을 정리합니다.',
+                  '대표 종목의 최근 변동 흐름만 간단히 정리합니다.',
                   style: TextStyle(
                     fontSize: 11.2,
                     color: isDark
@@ -1925,7 +2027,7 @@ class _LandingScreenState extends State<LandingScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '뉴스 관심 섹터',
+                                '오늘 많이 언급된 섹터',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w800,
@@ -1936,7 +2038,7 @@ class _LandingScreenState extends State<LandingScreen>
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '최근 뉴스에서 많이 언급된 섹터 비중을 요약합니다.',
+                                '오늘 아침판에서 비중이 높았던 섹터만 간단히 보여줍니다.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark
@@ -3539,6 +3641,8 @@ class _LandingInsightPanel extends StatelessWidget {
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final isPhone = viewportWidth < 600;
     final data = insight!;
     final score = _landingTrendScore(data);
     final delta = _landingTrendDelta(data);
@@ -3828,21 +3932,33 @@ class _LandingInsightSkeleton extends StatelessWidget {
 
 class _LandingTrendPanel extends StatelessWidget {
   final bool isLoading;
+  final DailyEditionSnapshot? edition;
   final TrendInsightSnapshot? insight;
+  final List<IssueTimelineItem> timelineItems;
+  final List<TrendItem> latestNews;
   final TextEditingController searchController;
   final VoidCallback onRefresh;
   final VoidCallback onSearch;
   final ValueChanged<TrendKeyword> onKeywordTap;
   final ValueChanged<RisingIssue> onRisingIssueTap;
+  final ValueChanged<EditionIssue> onEditionHeadlineTap;
+  final ValueChanged<IssueTimelineItem> onTimelineHeadlineTap;
+  final ValueChanged<TrendItem> onNewsHeadlineTap;
 
   const _LandingTrendPanel({
     required this.isLoading,
+    required this.edition,
     required this.insight,
+    required this.timelineItems,
+    required this.latestNews,
     required this.searchController,
     required this.onRefresh,
     required this.onSearch,
     required this.onKeywordTap,
     required this.onRisingIssueTap,
+    required this.onEditionHeadlineTap,
+    required this.onTimelineHeadlineTap,
+    required this.onNewsHeadlineTap,
   });
 
   @override
@@ -3852,84 +3968,375 @@ class _LandingTrendPanel extends StatelessWidget {
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final isPhone = viewportWidth < 600;
     final data = insight!;
     final score = _landingTrendScore(data);
     final delta = _landingTrendDelta(data);
     final timeLabel = _landingTimeLabel();
-    final coreIssue = _landingCoreIssueLine(data);
-    final marketImpact = _landingMarketImpactLines(data);
     final keywords = data.keywords
         .where((item) => _isLandingKeywordUseful(item.keyword))
-        .take(6)
+        .take(5)
         .toList();
-    final risingMap = {
-      for (final item in data.risingIssues) item.keyword: item,
-    };
+    final headlineItems = edition != null && edition!.topIssues.isNotEmpty
+        ? edition!.topIssues
+            .take(6)
+            .map(
+              (issue) => _LandingEditionHeadlineData(
+                title: issue.title,
+                summary: issue.summary,
+                category: issue.category,
+                meta: issue.selectionReason.isNotEmpty
+                    ? issue.selectionReason
+                    : '기사 ${issue.articleCount}건 · 출처 ${issue.sourceCount}곳',
+                editionIssue: issue,
+              ),
+            )
+            .toList()
+        : _landingEditionHeadlineItems(timelineItems, latestNews)
+            .take(6)
+            .toList();
+    final leadHeadline = headlineItems.isNotEmpty ? headlineItems.first : null;
+    final coreIssue = leadHeadline?.title ?? _landingEditionLeadLine(data, timelineItems);
+    final briefSummary =
+        leadHeadline?.summary ?? _landingEditionSummary(data, timelineItems);
+    final editionNotes = _landingEditionNotes(data, leadHeadline);
+    final issueCount = headlineItems.length +
+        data.risingIssues.take(3).length +
+        (keywords.isNotEmpty ? 1 : 0);
+    final readingMinutes = (4 + (issueCount * 0.7)).round().clamp(4, 8);
+    final progressLabel = headlineItems.isEmpty
+        ? '오늘 아침판 준비 중'
+        : '핵심 이슈 ${headlineItems.length}건 먼저 확인';
     final titleText = Theme.of(context).colorScheme.onSurface;
     final bodyText = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade800;
     final mutedText = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
     final ctaBg = isDark ? Colors.blue.shade600 : const Color(0xFF2563EB);
+    final softSurface = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final softBorder = isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5);
 
     Widget briefingHeader() {
-      return Row(
+      return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF172554)
-                        : const Color(0xFFEEF4FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.auto_awesome_rounded,
-                    size: 17,
-                    color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'AI 브리핑',
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF172554)
+                            : const Color(0xFFEEF4FF),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.auto_awesome_rounded,
+                        size: 18,
+                        color: isDark
+                            ? Colors.blue.shade200
+                            : Colors.blue.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '오늘의 Pulse',
                         style: TextStyle(
                           color: titleText,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
+                          fontSize: isPhone ? 17 : 18,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '마지막 분석 $timeLabel',
-                        style: TextStyle(
-                          color: mutedText,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: '새로고침',
+                onPressed: onRefresh,
+                icon: Icon(
+                  Icons.refresh_rounded,
+                  size: 19,
+                  color: mutedText,
+                ),
+                splashRadius: 18,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _LandingHeaderMetaPill(
+                icon: Icons.calendar_today_rounded,
+                label: _landingEditionDateLabel(),
+              ),
+              _LandingHeaderMetaPill(
+                icon: Icons.schedule_rounded,
+                label: '아침 $timeLabel 발행',
+              ),
+              _LandingHeaderMetaPill(
+                icon: Icons.library_books_rounded,
+                label: '핵심 변화 ${issueCount.clamp(3, 12)}건',
+              ),
+              _LandingHeaderMetaPill(
+                icon: Icons.timelapse_rounded,
+                label: '읽기 약 ${readingMinutes}분',
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    Widget trendScoreBlock() {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: softSurface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: softBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '트렌드 점수',
+                  style: TextStyle(
+                    color: titleText,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (delta >= 0
+                            ? const Color(0xFF2563EB)
+                            : Colors.blueGrey.shade500)
+                        .withOpacity(isDark ? 0.18 : 0.10),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    delta >= 0 ? '+$delta' : '$delta',
+                    style: TextStyle(
+                      color: delta >= 0
+                          ? (isDark ? Colors.blue.shade200 : ctaBg)
+                          : mutedText,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 10),
-          IconButton(
-            tooltip: '새로고침',
-            onPressed: onRefresh,
-            icon: Icon(
-              Icons.refresh_rounded,
-              size: 19,
-              color: mutedText,
+            const SizedBox(height: 10),
+            Text(
+              '$score점',
+              style: TextStyle(
+                color: titleText,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                height: 1,
+              ),
             ),
-            splashRadius: 18,
-            visualDensity: VisualDensity.compact,
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0, end: score / 100),
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, _) {
+                  return LinearProgressIndicator(
+                    value: value,
+                    minHeight: 6,
+                    backgroundColor: isDark
+                        ? const Color(0xFF1F2937)
+                        : const Color(0xFFE8EEF7),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFF2563EB),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              progressLabel,
+              style: TextStyle(
+                color: mutedText,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget summaryRail() {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: softSurface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: softBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '지금 주목할 이슈',
+              style: TextStyle(
+                color: titleText,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (headlineItems.isEmpty)
+              Text(
+                '핵심 헤드라인을 준비 중입니다.',
+                style: TextStyle(
+                  color: mutedText,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else
+              _LandingEditionHeadlineCarousel(
+                items: headlineItems,
+                onTap: (entry) {
+                  if (entry.editionIssue != null) {
+                    onEditionHeadlineTap(entry.editionIssue!);
+                    return;
+                  }
+                  if (entry.timelineItem != null) {
+                    onTimelineHeadlineTap(entry.timelineItem!);
+                    return;
+                  }
+                  if (entry.newsItem != null) {
+                    onNewsHeadlineTap(entry.newsItem!);
+                  }
+                },
+              ),
+          ],
+        ),
+      );
+    }
+
+    Widget keywordsBlock() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '핵심 키워드',
+            style: TextStyle(
+              color: titleText,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final keyword in keywords)
+                _LandingEditionKeywordChip(
+                  keyword: _cleanLandingKeyword(keyword.keyword),
+                  emphasis: keyword.newsCount >=
+                      (keywords.isNotEmpty ? keywords.first.newsCount : 0),
+                  onTap: () => onKeywordTap(keyword),
+                ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    Widget leftColumn() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          briefingHeader(),
+          const SizedBox(height: 18),
+          _LandingEditionLeadCarousel(
+            items: headlineItems,
+            titleText: titleText,
+            bodyText: bodyText,
+            mutedText: mutedText,
+            isPhone: isPhone,
+            fallbackTitle: coreIssue,
+            fallbackSummary: briefSummary,
+            onTap: (entry) {
+              if (entry.editionIssue != null) {
+                onEditionHeadlineTap(entry.editionIssue!);
+                return;
+              }
+              if (entry.timelineItem != null) {
+                onTimelineHeadlineTap(entry.timelineItem!);
+                return;
+              }
+              if (entry.newsItem != null) {
+                onNewsHeadlineTap(entry.newsItem!);
+              }
+            },
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final note in editionNotes)
+                _LandingHeaderMetaPill(
+                  icon: Icons.check_circle_outline_rounded,
+                  label: note,
+                  subtle: true,
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          trendScoreBlock(),
+          const SizedBox(height: 16),
+          keywordsBlock(),
+          const SizedBox(height: 16),
+          _buildSearchAndCta(context, searchController, onSearch),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => _LandingInsightDetailSheet(
+                insight: data,
+                score: score,
+                delta: delta,
+                marketImpact: _landingMarketImpactLines(data),
+              ),
+            ),
+            icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+            label: const Text('AI 브리핑 자세히 보기'),
+            style: FilledButton.styleFrom(
+              backgroundColor: ctaBg,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
           ),
         ],
       );
@@ -3940,305 +4347,24 @@ class _LandingTrendPanel extends StatelessWidget {
       decoration: PulseUi.sectionDecoration(context, prominent: true),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isCompact = constraints.maxWidth < 1040;
-
-          Widget sectionTitle(String title, String subtitle,
-              {bool compact = false}) {
-            final hasSubtitle = subtitle.trim().isNotEmpty;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: titleText,
-                    fontSize: compact ? 16 : 16,
-                    fontWeight: FontWeight.w700,
-                    height: 1.1,
-                  ),
-                ),
-                if (hasSubtitle) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: mutedText,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ],
-            );
-          }
-
-          Widget trendScoreBlock() {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '트렌드 점수',
-                      style: TextStyle(
-                        color: titleText,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '$score',
-                      style: TextStyle(
-                        color: titleText,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        height: 1,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      delta >= 0 ? '+$delta' : '$delta',
-                      style: TextStyle(
-                        color: delta >= 0 ? const Color(0xFF2563EB) : mutedText,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween<double>(begin: 0, end: score / 100),
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOutCubic,
-                    builder: (context, value, _) {
-                      return LinearProgressIndicator(
-                        value: value,
-                        minHeight: 5,
-                        backgroundColor: isDark
-                            ? const Color(0xFF1F2937)
-                            : const Color(0xFFE8EEF7),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFF2563EB),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '현재 흐름을 100점 기준으로 간단히 보여줍니다.',
-                  style: TextStyle(
-                    color: mutedText,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    height: 1.3,
-                  ),
-                ),
-              ],
-            );
-          }
-
-          Widget keywordsBlock() {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                sectionTitle(
-                  '실시간 인기 키워드',
-                  '지금 많이 언급되는 흐름을 빠르게 확인하세요',
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 12,
-                  children: [
-                    for (final keyword in keywords)
-                      _LandingKeywordChipV2(
-                        keyword: keyword,
-                        risingIssue: risingMap[keyword.keyword],
-                        onTap: () => onKeywordTap(keyword),
-                      ),
-                  ],
-                ),
-              ],
-            );
-          }
-
-          Widget briefingBlock() {
-            final summary = data.sentiment.summary.trim().isEmpty
-                ? '오늘의 뉴스 흐름을 간단히 정리합니다.'
-                : data.sentiment.summary.trim();
-            final impactLine = marketImpact.isEmpty
-                ? '시장 영향은 집계 중입니다.'
-                : marketImpact.take(2).join(' · ');
-            final metaLine =
-                '분석 ${data.keywords.length}개 · ${_sentimentCaption(data.sentiment.temperature)} · $impactLine';
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '오늘의 핵심 이슈',
-                  style: TextStyle(
-                    color: titleText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    height: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  coreIssue,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: bodyText,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF0F172A)
-                        : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isDark
-                          ? const Color(0xFF1F2937)
-                          : const Color(0xFFE8EEF5),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.blue.shade200
-                                  : const Color(0xFF2563EB),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '핵심 요약',
-                            style: TextStyle(
-                              color: mutedText,
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        summary,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: bodyText,
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w700,
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        metaLine,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: mutedText,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: () => showModalBottomSheet<void>(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => _LandingInsightDetailSheet(
-                        insight: data,
-                        score: score,
-                        delta: delta,
-                        marketImpact: marketImpact,
-                      ),
-                    ),
-                    icon: Icon(
-                      Icons.auto_awesome_rounded,
-                      size: 18,
-                      color: ctaBg,
-                    ),
-                    label: Text(
-                      '상세 AI 요약',
-                      style: TextStyle(
-                        color: ctaBg,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }
-
+          final isCompact = constraints.maxWidth < 980;
           if (isCompact) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                briefingHeader(),
-                const SizedBox(height: 16),
-                briefingBlock(),
-                const SizedBox(height: 14),
-                trendScoreBlock(),
-                const SizedBox(height: 16),
-                keywordsBlock(),
-                const SizedBox(height: 16),
-                _buildSearchAndCta(context, searchController, onSearch),
+                leftColumn(),
+                const SizedBox(height: 18),
+                summaryRail(),
               ],
             );
           }
 
-          return Column(
+          return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              briefingHeader(),
-              const SizedBox(height: 18),
-              briefingBlock(),
-              const SizedBox(height: 16),
-              trendScoreBlock(),
-              const SizedBox(height: 16),
-              keywordsBlock(),
-              const SizedBox(height: 16),
-              _buildSearchAndCta(context, searchController, onSearch),
+              Expanded(flex: 6, child: leftColumn()),
+              const SizedBox(width: 18),
+              Expanded(flex: 4, child: summaryRail()),
             ],
           );
         },
@@ -4291,7 +4417,7 @@ class _LandingTrendPanel extends StatelessWidget {
         final actionButton = FilledButton.icon(
           onPressed: onSearch,
           icon: const Icon(Icons.bolt_rounded, size: 18),
-          label: const Text('실시간 뉴스 보기'),
+          label: const Text('전체 뉴스 보기'),
           style: FilledButton.styleFrom(
             backgroundColor:
                 isDark ? Colors.blue.shade600 : const Color(0xFF2563EB),
@@ -7186,6 +7312,922 @@ List<String> _landingMarketImpactLines(TrendInsightSnapshot insight) {
   return lines;
 }
 
+class _LandingHeaderMetaPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool subtle;
+
+  const _LandingHeaderMetaPill({
+    required this.icon,
+    required this.label,
+    this.subtle = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isPhone = MediaQuery.sizeOf(context).width < 600;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isPhone ? 9 : 10,
+        vertical: isPhone ? 6 : 7,
+      ),
+      decoration: BoxDecoration(
+        color: subtle
+            ? (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC))
+            : (isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF)),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 13,
+            color: isDark ? Colors.blue.shade200 : const Color(0xFF2563EB),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+              fontSize: isPhone ? 10.8 : 11.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LandingEditionKeywordChip extends StatelessWidget {
+  final String keyword;
+  final bool emphasis;
+  final VoidCallback onTap;
+
+  const _LandingEditionKeywordChip({
+    required this.keyword,
+    required this.emphasis,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.symmetric(
+          horizontal: emphasis ? 13 : 12,
+          vertical: emphasis ? 9 : 8,
+        ),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Text(
+          keyword,
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+            fontSize: emphasis ? 12.8 : 12.3,
+            fontWeight: emphasis ? FontWeight.w800 : FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LandingEditionHeadlineCard extends StatelessWidget {
+  final _LandingEditionHeadlineData item;
+  final int index;
+  final VoidCallback? onTap;
+  final bool compact;
+
+  const _LandingEditionHeadlineCard({
+    required this.item,
+    required this.index,
+    this.onTap,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isPhone = MediaQuery.sizeOf(context).width < 600;
+    final showSummary = !compact;
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final bodyColor = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade700;
+    final muted = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: compact ? 22 : 24,
+                  height: compact ? 22 : 24,
+                  decoration: BoxDecoration(
+                    color:
+                        isDark ? const Color(0xFF172554) : const Color(0xFFEEF4FF),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${index + 1}',
+                      style: TextStyle(
+                        color:
+                            isDark ? Colors.blue.shade100 : const Color(0xFF2563EB),
+                        fontSize: compact ? 10.8 : 11.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: compact ? 6 : 8),
+                Expanded(
+                  child: Text(
+                    item.category,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: muted,
+                      fontSize: compact ? 11.0 : 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (onTap != null)
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: compact ? 16 : 18,
+                    color: muted,
+                  ),
+              ],
+            ),
+            SizedBox(height: compact ? 6 : 8),
+            Text(
+              item.title,
+              maxLines: compact ? 1 : 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: titleColor,
+                fontSize: compact
+                    ? (isPhone ? 13.1 : 13.6)
+                    : (isPhone ? 13.8 : 14.5),
+                fontWeight: FontWeight.w800,
+                height: 1.35,
+              ),
+            ),
+            if (showSummary) ...[
+              const SizedBox(height: 6),
+              Text(
+                item.summary,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: bodyColor,
+                  fontSize: isPhone ? 12.1 : 12.5,
+                  fontWeight: FontWeight.w600,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 6),
+            ] else
+              const SizedBox(height: 4),
+            Text(
+              item.meta,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: muted,
+                fontSize: compact
+                    ? (isPhone ? 10.0 : 10.4)
+                    : (isPhone ? 10.5 : 11),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LandingEditionLeadCarousel extends StatefulWidget {
+  final List<_LandingEditionHeadlineData> items;
+  final Color titleText;
+  final Color bodyText;
+  final Color mutedText;
+  final bool isPhone;
+  final String fallbackTitle;
+  final String fallbackSummary;
+  final ValueChanged<_LandingEditionHeadlineData> onTap;
+
+  const _LandingEditionLeadCarousel({
+    required this.items,
+    required this.titleText,
+    required this.bodyText,
+    required this.mutedText,
+    required this.isPhone,
+    required this.fallbackTitle,
+    required this.fallbackSummary,
+    required this.onTap,
+  });
+
+  @override
+  State<_LandingEditionLeadCarousel> createState() =>
+      _LandingEditionLeadCarouselState();
+}
+
+class _LandingEditionLeadCarouselState extends State<_LandingEditionLeadCarousel> {
+  late final PageController _controller;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController(viewportFraction: 1);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = isDark ? Colors.blue.shade200 : const Color(0xFF2563EB);
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5);
+
+    if (widget.items.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '오늘의 핵심 이슈',
+            style: TextStyle(
+              color: widget.mutedText,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            widget.fallbackTitle,
+            style: TextStyle(
+              color: widget.titleText,
+              fontSize: widget.isPhone ? 21 : 24,
+              fontWeight: FontWeight.w900,
+              height: 1.22,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            widget.fallbackSummary,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: widget.bodyText,
+              fontSize: widget.isPhone ? 14.5 : 15.5,
+              fontWeight: FontWeight.w600,
+              height: 1.55,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '오늘의 핵심 이슈',
+              style: TextStyle(
+                color: widget.mutedText,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${_currentIndex + 1} / ${widget.items.length}',
+              style: TextStyle(
+                color: widget.mutedText,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: widget.isPhone ? 236 : 214,
+          child: PageView.builder(
+            controller: _controller,
+            itemCount: widget.items.length,
+            onPageChanged: (value) {
+              if (!mounted) return;
+              setState(() => _currentIndex = value);
+            },
+            itemBuilder: (context, index) {
+              final item = widget.items[index];
+              return InkWell(
+                onTap: () => widget.onTap(item),
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 2, bottom: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          _LandingTinyBadge(
+                            text: item.category.isEmpty ? '핵심' : item.category,
+                            foreground: accent,
+                            background: isDark
+                                ? const Color(0xFF172554)
+                                : const Color(0xFFEEF4FF),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        item.title,
+                        maxLines: widget.isPhone ? 2 : 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.titleText,
+                          fontSize: widget.isPhone ? 21 : 24,
+                          fontWeight: FontWeight.w900,
+                          height: 1.22,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        item.summary,
+                        maxLines: widget.isPhone ? 3 : 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.bodyText,
+                          fontSize: widget.isPhone ? 14.2 : 15.4,
+                          fontWeight: FontWeight.w600,
+                          height: 1.55,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        item.meta,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.mutedText,
+                          fontSize: widget.isPhone ? 11.0 : 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Wrap(
+                              spacing: 6,
+                              children: List.generate(widget.items.length, (dot) {
+                                final active = dot == _currentIndex;
+                                return AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  curve: Curves.easeOut,
+                                  width: active ? 18 : 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    color: active ? accent : border,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
+                          Icon(
+                            Icons.swipe_rounded,
+                            size: 16,
+                            color: widget.mutedText,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LandingEditionHeadlineCarousel extends StatefulWidget {
+  final List<_LandingEditionHeadlineData> items;
+  final ValueChanged<_LandingEditionHeadlineData> onTap;
+
+  const _LandingEditionHeadlineCarousel({
+    required this.items,
+    required this.onTap,
+  });
+
+  @override
+  State<_LandingEditionHeadlineCarousel> createState() =>
+      _LandingEditionHeadlineCarouselState();
+}
+
+class _LandingEditionHeadlineCarouselState
+    extends State<_LandingEditionHeadlineCarousel> {
+  late final PageController _controller;
+  int _currentIndex = 0;
+
+  List<List<_LandingEditionHeadlineData>> _buildPages({
+    required double railWidth,
+    required double screenWidth,
+  }) {
+    final perPage = screenWidth >= 980
+        ? 3
+        : railWidth < 420
+            ? 1
+            : railWidth < 560
+                ? 2
+                : 3;
+    final pages = <List<_LandingEditionHeadlineData>>[];
+    for (var i = 0; i < widget.items.length; i += perPage) {
+      pages.add(
+        widget.items.sublist(
+          i,
+          math.min(i + perPage, widget.items.length),
+        ),
+      );
+    }
+    return pages;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController(viewportFraction: 1);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE8EEF5);
+    final surface = isDark ? const Color(0xFF111827) : Colors.white;
+    final muted = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final railWidth = constraints.maxWidth;
+        final pages = _buildPages(
+          railWidth: railWidth,
+          screenWidth: screenWidth,
+        );
+        final perPage = pages.isEmpty ? 1 : pages.first.length;
+        final carouselHeight = perPage == 1
+            ? 182.0
+            : perPage == 2
+                ? 258.0
+                : 320.0;
+
+        if (_currentIndex >= pages.length && pages.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() => _currentIndex = pages.length - 1);
+          });
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: carouselHeight,
+              child: PageView.builder(
+                controller: _controller,
+                itemCount: pages.length,
+                onPageChanged: (value) {
+                  if (!mounted) return;
+                  setState(() => _currentIndex = value);
+                },
+                itemBuilder: (context, index) {
+                  final pageItems = pages[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: border),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        for (var itemIndex = 0;
+                            itemIndex < pageItems.length;
+                            itemIndex++) ...[
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: _LandingEditionHeadlineCard(
+                                item: pageItems[itemIndex],
+                                index: index * 3 + itemIndex,
+                                compact: pageItems.length >= 2,
+                                onTap: () => widget.onTap(pageItems[itemIndex]),
+                              ),
+                            ),
+                          ),
+                          if (itemIndex != pageItems.length - 1) ...[
+                            const SizedBox(height: 8),
+                            Divider(
+                              height: 1,
+                              color: border,
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Wrap(
+                  spacing: 6,
+                  children: List.generate(pages.length, (index) {
+                    final active = index == _currentIndex;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      width: active ? 18 : 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: active
+                            ? (isDark
+                                ? Colors.blue.shade200
+                                : const Color(0xFF2563EB))
+                            : border,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    );
+                  }),
+                ),
+                const Spacer(),
+                Text(
+                  '${pages.isEmpty ? 0 : _currentIndex + 1} / ${pages.length}',
+                  style: TextStyle(
+                    color: muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _LandingEditionUpdateTile extends StatelessWidget {
+  final IssueTimelineItem item;
+  final VoidCallback onTap;
+
+  const _LandingEditionUpdateTile({
+    required this.item,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isPhone = MediaQuery.sizeOf(context).width < 600;
+    final timeLabel = _landingTimelineTimeLabel(item.lastSeenAt);
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final bodyColor = isDark ? Colors.grey.shade300 : Colors.blueGrey.shade700;
+    final muted = isDark ? Colors.grey.shade400 : Colors.blueGrey.shade500;
+    final lineColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final dotColor = item.growthRate >= 100
+        ? const Color(0xFFDC2626)
+        : item.growthRate > 0
+            ? const Color(0xFF2563EB)
+            : const Color(0xFF94A3B8);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: isPhone ? 54 : 62,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _landingClockLabel(_landingParseTimestamp(item.lastSeenAt)),
+                    style: TextStyle(
+                      color: titleColor,
+                      fontSize: isPhone ? 11.8 : 12.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    timeLabel,
+                    style: TextStyle(
+                      color: muted,
+                      fontSize: isPhone ? 10.0 : 10.8,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: isPhone ? 16 : 20,
+              child: Column(
+                children: [
+                  Container(
+                    width: isPhone ? 8 : 10,
+                    height: isPhone ? 8 : 10,
+                    margin: const EdgeInsets.only(top: 4),
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  Container(
+                    width: 2,
+                    height: isPhone ? 48 : 56,
+                    margin: const EdgeInsets.only(top: 6),
+                    color: lineColor,
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(width: isPhone ? 6 : 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      _LandingTinyBadge(
+                        text: item.category.isEmpty ? '이슈' : item.category,
+                        foreground: isDark
+                            ? Colors.blue.shade100
+                            : const Color(0xFF2563EB),
+                        background: isDark
+                            ? const Color(0xFF172554)
+                            : const Color(0xFFEEF4FF),
+                      ),
+                      _LandingTinyBadge(
+                        text: '출처 ${item.sourceCount}곳',
+                        foreground: isDark
+                            ? Colors.grey.shade100
+                            : const Color(0xFF334155),
+                        background: isDark
+                            ? const Color(0xFF1F2937)
+                            : const Color(0xFFF1F5F9),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    item.title.isEmpty ? item.keyword : item.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: titleColor,
+                      fontSize: isPhone ? 13.5 : 14.5,
+                      fontWeight: FontWeight.w800,
+                      height: 1.35,
+                    ),
+                  ),
+                  if (item.summary.trim().isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      item.summary.trim(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: bodyColor,
+                        fontSize: isPhone ? 11.8 : 12.3,
+                        fontWeight: FontWeight.w600,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _landingEditionDateLabel() {
+  final now = DateTime.now();
+  const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+  final weekday = weekdays[now.weekday - 1];
+  return '${now.month}월 ${now.day}일 $weekday요일';
+}
+
+String _landingEditionLeadLine(
+  TrendInsightSnapshot insight,
+  List<IssueTimelineItem> timelineItems,
+) {
+  final issue = timelineItems.isNotEmpty ? timelineItems.first : null;
+  if (issue != null && issue.title.trim().isNotEmpty) {
+    return issue.title.trim();
+  }
+
+  return _landingCoreIssueLine(insight);
+}
+
+String _landingEditionSummary(
+  TrendInsightSnapshot insight,
+  List<IssueTimelineItem> timelineItems,
+) {
+  final issue = timelineItems.isNotEmpty ? timelineItems.first : null;
+  final summary = issue?.summary.trim() ?? '';
+  if (summary.isNotEmpty) {
+    return summary;
+  }
+
+  return _landingBriefingTextSafe(insight).replaceAll('\n', ' ');
+}
+
+List<String> _landingEditionNotes(
+  TrendInsightSnapshot insight,
+  _LandingEditionHeadlineData? leadHeadline,
+) {
+  final lines = _landingMarketImpactLines(insight);
+  return [
+    if (leadHeadline != null)
+      leadHeadline.category == '경제' || leadHeadline.category == '증시'
+          ? '국내 시장 영향도 높음'
+          : '${leadHeadline.category} 흐름 우선 확인',
+    if (lines.isNotEmpty) lines.first,
+    _sentimentCaption(insight.sentiment.temperature).replaceFirst('뉴스 분위기: ', ''),
+  ].take(3).toList();
+}
+
+List<_LandingEditionHeadlineData> _landingEditionHeadlineItems(
+  List<IssueTimelineItem> timelineItems,
+  List<TrendItem> latestNews,
+) {
+  final items = <_LandingEditionHeadlineData>[];
+  final sortedTimelineItems = [...timelineItems]
+    ..sort((a, b) => _landingEditionPriorityScore(b).compareTo(_landingEditionPriorityScore(a)));
+
+  for (final item in sortedTimelineItems.take(5)) {
+    items.add(
+      _LandingEditionHeadlineData(
+        title: item.title.trim().isEmpty ? item.keyword.trim() : item.title.trim(),
+        summary: item.summary.trim().isEmpty
+            ? '관련 기사 ${item.articleCount}건, 출처 ${item.sourceCount}곳에서 확인됐습니다.'
+            : item.summary.trim(),
+        category: item.category.trim().isEmpty ? '이슈' : item.category.trim(),
+        meta: '기사 ${item.articleCount}건 · 출처 ${item.sourceCount}곳',
+        timelineItem: item,
+      ),
+    );
+  }
+
+  if (items.length >= 3) {
+    return items.take(3).toList();
+  }
+
+  final sortedNews = [...latestNews]
+    ..sort((a, b) => _landingEditionNewsPriorityScore(b).compareTo(_landingEditionNewsPriorityScore(a)));
+
+  for (final item in sortedNews) {
+    if (items.length >= 3) break;
+    if (item.koreanTitle.trim().isEmpty) continue;
+    items.add(
+      _LandingEditionHeadlineData(
+        title: item.koreanTitle.trim(),
+        summary: item.summaryKr.trim().isEmpty
+            ? '최신 기사 흐름에서 확인된 주요 이슈입니다.'
+            : item.summaryKr.trim(),
+        category: item.category.trim().isEmpty ? '일반' : item.category.trim(),
+        meta: item.source.trim().isEmpty ? '출처 확인 중' : '출처 ${item.source.trim()}',
+        newsItem: item,
+      ),
+    );
+  }
+
+  return items;
+}
+
+int _landingEditionPriorityScore(IssueTimelineItem item) {
+  var score = item.score.round();
+  score += item.articleCount * 3;
+  score += item.sourceCount * 6;
+  score += item.growthRate.round().clamp(0, 120);
+
+  final text = '${item.category} ${item.keyword} ${item.title}'.toLowerCase();
+
+  if (text.contains('코스피') ||
+      text.contains('코스닥') ||
+      text.contains('증시') ||
+      text.contains('금리') ||
+      text.contains('환율') ||
+      text.contains('반도체') ||
+      text.contains('서킷') ||
+      text.contains('경제')) {
+    score += 42;
+  }
+
+  if (text.contains('정치') ||
+      text.contains('사회') ||
+      text.contains('정부') ||
+      text.contains('폭염') ||
+      text.contains('안전')) {
+    score += 18;
+  }
+
+  if (text.contains('비트코인') ||
+      text.contains('가상자산') ||
+      text.contains('코인') ||
+      text.contains('암호화폐')) {
+    score -= 20;
+  }
+
+  return score;
+}
+
+int _landingEditionNewsPriorityScore(TrendItem item) {
+  var score = item.importance * 14;
+  score += item.viewCount.clamp(0, 200);
+  final text = '${item.category} ${item.koreanTitle}'.toLowerCase();
+
+  if (text.contains('코스피') ||
+      text.contains('코스닥') ||
+      text.contains('증시') ||
+      text.contains('금리') ||
+      text.contains('환율') ||
+      text.contains('반도체') ||
+      text.contains('서킷') ||
+      text.contains('경제')) {
+    score += 34;
+  }
+
+  if (text.contains('비트코인') ||
+      text.contains('가상자산') ||
+      text.contains('코인') ||
+      text.contains('암호화폐')) {
+    score -= 16;
+  }
+
+  return score;
+}
+
 String _landingNewsImportanceLabel(int importance) {
   if (importance >= 5) return '긴급';
   if (importance >= 4) return '주요';
@@ -7494,6 +8536,26 @@ class _LandingSectorDominanceRowData {
   }
 }
 
+class _LandingEditionHeadlineData {
+  final String title;
+  final String summary;
+  final String category;
+  final String meta;
+  final EditionIssue? editionIssue;
+  final IssueTimelineItem? timelineItem;
+  final TrendItem? newsItem;
+
+  const _LandingEditionHeadlineData({
+    required this.title,
+    required this.summary,
+    required this.category,
+    required this.meta,
+    this.editionIssue,
+    this.timelineItem,
+    this.newsItem,
+  });
+}
+
 class _LandingMarketRankRow extends StatelessWidget {
   final int rank;
   final _LandingMarketQuote quote;
@@ -7506,7 +8568,9 @@ class _LandingMarketRankRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final compact = MediaQuery.sizeOf(context).width < 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < 900;
+    final isPhone = width < 600;
     final up = quote.percentChange >= 0;
     final changeColor = quote.percentChange == 0
         ? (isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500)
@@ -7525,177 +8589,135 @@ class _LandingMarketRankRow extends StatelessWidget {
         : DateTime.now().difference(updatedAt).inMinutes;
     final staleState = ageMinutes == null ? '시세 확인 중' : null;
 
+    final badge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: changeColor.withOpacity(isDark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+            size: 13,
+            color: changeColor,
+          ),
+          const SizedBox(width: 3),
+          Text(
+            _landingFormatPercent(quote.percentChange),
+            style: TextStyle(
+              fontSize: 10.8,
+              fontWeight: FontWeight.w800,
+              color: changeColor,
+            ),
+          ),
+        ],
+      ),
+    );
+
     return _HoverButton(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: isPhone ? 10 : 12,
+          vertical: isPhone ? 9 : 10,
+        ),
         decoration: BoxDecoration(
           color: surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: border),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 34,
-              child: Text(
-                rank.toString().padLeft(2, '0'),
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w900,
-                  color:
-                      isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: 11,
-              child: Column(
+        child: isPhone
+            ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    quote.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13.2,
-                      fontWeight: FontWeight.w800,
-                      color: priceTextColor,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    code,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 9.8,
-                      fontWeight: FontWeight.w600,
-                      color: muted,
-                    ),
-                  ),
-                  if (naverUrl != null) ...[
-                    const SizedBox(height: 6),
-                    InkWell(
-                      onTap: () => _landingOpenExternalLink(context, naverUrl),
-                      borderRadius: BorderRadius.circular(999),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF172554)
-                              : const Color(0xFFEEF4FF),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 26,
                         child: Text(
-                          '실시간 시세 보기',
+                          rank.toString().padLeft(2, '0'),
                           style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
+                            fontSize: 11.8,
+                            fontWeight: FontWeight.w900,
                             color: isDark
-                                ? Colors.blue.shade100
-                                : const Color(0xFF2563EB),
+                                ? Colors.grey.shade300
+                                : Colors.blueGrey.shade500,
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              flex: 6,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: changeColor.withOpacity(isDark ? 0.18 : 0.10),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          fit: FlexFit.loose,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  up
-                                      ? Icons.arrow_upward_rounded
-                                      : Icons.arrow_downward_rounded,
-                                  size: 13,
-                                  color: changeColor,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  _landingFormatPercent(quote.percentChange),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              quote.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: priceTextColor,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            if (naverUrl != null)
+                              InkWell(
+                                onTap: () =>
+                                    _landingOpenExternalLink(context, naverUrl),
+                                borderRadius: BorderRadius.circular(999),
+                                child: Text(
+                                  '실시간 시세 보기',
                                   style: TextStyle(
-                                    fontSize: 10.8,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w800,
-                                    color: changeColor,
+                                    color: isDark
+                                        ? Colors.blue.shade100
+                                        : const Color(0xFF2563EB),
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
+                              ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '24시간 변동률',
-                    style: TextStyle(
-                      fontSize: 9.6,
-                      fontWeight: FontWeight.w600,
-                      color: muted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              flex: 6,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      _landingFormatPrice(
-                        quote.currentPrice,
-                        marketType: 'kr',
-                        symbol: quote.symbol,
                       ),
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: priceTextColor,
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                _landingFormatPrice(
+                                  quote.currentPrice,
+                                  marketType: 'kr',
+                                  symbol: quote.symbol,
+                                ),
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 12.2,
+                                  fontWeight: FontWeight.w800,
+                                  color: priceTextColor,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            badge,
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 6),
                   Text(
                     updatedAt == null
                         ? '시간 확인 중'
                         : '${_landingFormatUpdatedAt(updatedAt)} 기준',
                     style: TextStyle(
-                      fontSize: 9.8,
+                      fontSize: 9.4,
                       fontWeight: FontWeight.w600,
                       color: muted,
                     ),
@@ -7705,17 +8727,159 @@ class _LandingMarketRankRow extends StatelessWidget {
                     Text(
                       staleState,
                       style: TextStyle(
-                        fontSize: 9.2,
+                        fontSize: 9,
                         fontWeight: FontWeight.w600,
                         color: muted,
                       ),
                     ),
                   ],
                 ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 34,
+                    child: Text(
+                      rank.toString().padLeft(2, '0'),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w900,
+                        color: isDark
+                            ? Colors.grey.shade300
+                            : Colors.blueGrey.shade500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 11,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          quote.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13.2,
+                            fontWeight: FontWeight.w800,
+                            color: priceTextColor,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          code,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 9.8,
+                            fontWeight: FontWeight.w600,
+                            color: muted,
+                          ),
+                        ),
+                        if (naverUrl != null) ...[
+                          const SizedBox(height: 6),
+                          InkWell(
+                            onTap: () =>
+                                _landingOpenExternalLink(context, naverUrl),
+                            borderRadius: BorderRadius.circular(999),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF172554)
+                                    : const Color(0xFFEEF4FF),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '실시간 시세 보기',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark
+                                      ? Colors.blue.shade100
+                                      : const Color(0xFF2563EB),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    flex: 6,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        badge,
+                        const SizedBox(height: 3),
+                        Text(
+                          '24시간 변동률',
+                          style: TextStyle(
+                            fontSize: 9.6,
+                            fontWeight: FontWeight.w600,
+                            color: muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    flex: 6,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            _landingFormatPrice(
+                              quote.currentPrice,
+                              marketType: 'kr',
+                              symbol: quote.symbol,
+                            ),
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: priceTextColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          updatedAt == null
+                              ? '시간 확인 중'
+                              : '${_landingFormatUpdatedAt(updatedAt)} 기준',
+                          style: TextStyle(
+                            fontSize: 9.8,
+                            fontWeight: FontWeight.w600,
+                            color: muted,
+                          ),
+                        ),
+                        if (staleState != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            staleState,
+                            style: TextStyle(
+                              fontSize: 9.2,
+                              fontWeight: FontWeight.w600,
+                              color: muted,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -8077,7 +9241,9 @@ class _LandingMarketSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final compact = MediaQuery.sizeOf(context).width < 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < 900;
+    final isPhone = width < 600;
     final up = quote.percentChange >= 0;
     final accent = up
         ? (isDark ? Colors.red.shade300 : Colors.red.shade600)
@@ -8211,6 +9377,7 @@ class _LandingExchangeRateRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isPhone = MediaQuery.sizeOf(context).width < 600;
     final up = quote.percentChange >= 0;
     final accent = up
         ? (isDark ? Colors.red.shade300 : Colors.red.shade600)
@@ -8223,26 +9390,166 @@ class _LandingExchangeRateRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 88,
-            child: Column(
+      child: isPhone
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  quote.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        quote.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        _landingMarketPriceLabel(quote),
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 13.2,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          up
+                              ? Icons.arrow_upward_rounded
+                              : Icons.arrow_downward_rounded,
+                          size: 12,
+                          color: accent,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          _landingFormatPercent(quote.percentChange),
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '전일 대비 $deltaLabel',
+                      style: TextStyle(
+                        color: muted,
+                        fontSize: 9.6,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      quote.priceUpdatedAt == null
+                          ? '기준 시각 --:--'
+                          : '${_landingFormatUpdatedAt(quote.priceUpdatedAt)} 기준',
+                      style: TextStyle(
+                        color: muted,
+                        fontSize: 9.6,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                SizedBox(
+                  width: 88,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        quote.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        '전일 대비',
+                        style: TextStyle(
+                          color: muted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 1),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _landingMarketPriceLabel(quote),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      up
+                          ? Icons.arrow_upward_rounded
+                          : Icons.arrow_downward_rounded,
+                      size: 13,
+                      color: accent,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      _landingFormatPercent(quote.percentChange),
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 8),
                 Text(
-                  '전일 대비',
+                  '전일 대비 $deltaLabel',
+                  style: TextStyle(
+                    color: muted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  quote.priceUpdatedAt == null
+                      ? '기준 시각 --:--'
+                      : '${_landingFormatUpdatedAt(quote.priceUpdatedAt)} 기준',
                   style: TextStyle(
                     color: muted,
                     fontSize: 10,
@@ -8251,61 +9558,6 @@ class _LandingExchangeRateRow extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              _landingMarketPriceLabel(quote),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 14.0,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                size: 13,
-                color: accent,
-              ),
-              const SizedBox(width: 3),
-              Text(
-                _landingFormatPercent(quote.percentChange),
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '전일 대비 $deltaLabel',
-            style: TextStyle(
-              color: muted,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            quote.priceUpdatedAt == null
-                ? '기준 시각 --:--'
-                : '${_landingFormatUpdatedAt(quote.priceUpdatedAt)} 기준',
-            style: TextStyle(
-              color: muted,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

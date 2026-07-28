@@ -98,6 +98,19 @@ class ApiService {
     );
   }
 
+  Future<DailyEditionSnapshot> fetchDailyEdition({
+    int limit = 6,
+    Duration cacheDuration = _defaultCacheDuration,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/edition/today').replace(
+      queryParameters: {
+        'limit': '$limit',
+      },
+    );
+    final jsonData = await _getJson(uri, cacheDuration: cacheDuration);
+    return DailyEditionSnapshot.fromJson(jsonData);
+  }
+
   Future<List<IssueTimelineItem>> fetchTrendTimeline({
     String period = '24h',
     String category = '',

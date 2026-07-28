@@ -138,6 +138,88 @@ class KeywordNewsResult {
   });
 }
 
+class EditionIssue {
+  final String id;
+  final int rank;
+  final String category;
+  final String keyword;
+  final String title;
+  final String summary;
+  final int articleCount;
+  final int sourceCount;
+  final List<int> newsIds;
+  final double score;
+  final String stage;
+  final String lastSeenAt;
+  final String selectionReason;
+
+  const EditionIssue({
+    required this.id,
+    required this.rank,
+    required this.category,
+    required this.keyword,
+    required this.title,
+    required this.summary,
+    required this.articleCount,
+    required this.sourceCount,
+    required this.newsIds,
+    required this.score,
+    required this.stage,
+    required this.lastSeenAt,
+    required this.selectionReason,
+  });
+
+  factory EditionIssue.fromJson(Map<String, dynamic> json) {
+    return EditionIssue(
+      id: json['id'] as String? ?? '',
+      rank: _asInt(json['rank']),
+      category: json['category'] as String? ?? '',
+      keyword: json['keyword'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      summary: json['summary'] as String? ?? '',
+      articleCount: _asInt(json['articleCount']),
+      sourceCount: _asInt(json['sourceCount']),
+      newsIds: (json['newsIds'] as List<dynamic>? ?? const [])
+          .map((value) => _asInt(value))
+          .where((value) => value > 0)
+          .toList(),
+      score: _asDouble(json['score']),
+      stage: json['stage'] as String? ?? 'rising',
+      lastSeenAt: json['lastSeenAt'] as String? ?? '',
+      selectionReason: json['selectionReason'] as String? ?? '',
+    );
+  }
+}
+
+class DailyEditionSnapshot {
+  final String editionDate;
+  final String publishedAt;
+  final int issueCount;
+  final int readingMinutes;
+  final List<EditionIssue> topIssues;
+
+  const DailyEditionSnapshot({
+    required this.editionDate,
+    required this.publishedAt,
+    required this.issueCount,
+    required this.readingMinutes,
+    required this.topIssues,
+  });
+
+  factory DailyEditionSnapshot.fromJson(Map<String, dynamic> json) {
+    final items = json['topIssues'] as List<dynamic>? ?? const [];
+    return DailyEditionSnapshot(
+      editionDate: json['editionDate'] as String? ?? '',
+      publishedAt: json['publishedAt'] as String? ?? '',
+      issueCount: _asInt(json['issueCount']),
+      readingMinutes: _asInt(json['readingMinutes']),
+      topIssues: items
+          .map((item) => EditionIssue.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
 class IssueTimelineItem {
   final String id;
   final int rank;

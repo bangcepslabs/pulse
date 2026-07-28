@@ -96,6 +96,10 @@ export default {
         return await handleGetTrendTimeline(url, env, corsHeaders);
       }
 
+      if (path === '/api/edition/today' && request.method === 'GET') {
+        return await handleGetDailyEdition(url, env, corsHeaders);
+      }
+
       if (path.match(/^\/api\/trend\/timeline\/[^/]+\/news$/) && request.method === 'GET') {
         const issueId = path.split('/')[4];
         return await handleGetIssueTimelineNews(url, issueId, env, corsHeaders);
@@ -413,6 +417,99 @@ async function handleGetTrendTimeline(url, env, corsHeaders) {
     category,
     limit,
     items,
+  }, corsHeaders);
+}
+
+async function handleGetDailyEdition(url, env, corsHeaders) {
+  const limit = clampNumber(parseInt(url.searchParams.get('limit') || '6', 10), 3, 9);
+  const period = '24h';
+
+  const filters = [
+    `period=eq.${encodeURIComponent(period)}`,
+    'score=gte.45',
+  ];
+
+  const endpoint =
+    `issue_clusters?select=id,period,category,canonical_keyword,representative_title,summary,article_count,source_count,growth_rate,score,sentiment_temperature,stage,first_seen_at,last_seen_at,created_at,updated_at&${filters.join('&')}&order=score.desc,last_seen_at.desc&limit=24`;
+  const { data, error } = await querySupabase(env, endpoint);
+
+  if (error) {
+    throw new Error(error.message || 'Failed to fetch daily edition');
+  }
+
+  let items = (data || []).map((row) => ({
+    id: row.id,
+    rank: 0,
+    period: row.period,
+    category: row.category,
+    keyword: row.canonical_keyword || '',
+    title: row.representative_title || row.canonical_keyword || '',
+    summary: row.summary || '',
+    articleCount: row.article_count || 0,
+    sourceCount: row.source_count || 0,
+    growthRate: Number(row.growth_rate || 0),
+    score: Number(row.score || 0),
+    sentimentTemperature: row.sentiment_temperature == null ? null : Number(row.sentiment_temperature),
+    stage: row.stage || 'rising',
+    firstSeenAt: row.first_seen_at || row.created_at || '',
+    lastSeenAt: row.last_seen_at || row.updated_at || row.created_at || '',
+    newsIds: [],
+  }));
+
+  if (items.length === 0) {
+    items = await buildLiveTrendTimelineFromTrends(env, period, '', 18, 45);
+  }
+
+  if (items.length > 0) {
+    const issueIds = items.map(item => String(item.id)).filter(Boolean);
+    const { data: mappingRows } = await querySupabase(
+      env,
+      `issue_cluster_articles?select=issue_cluster_id,news_id&issue_cluster_id=in.(${issueIds.join(',')})&order=similarity_score.desc,created_at.desc`
+    );
+
+    const mappingMap = new Map();
+    for (const row of mappingRows || []) {
+      const key = String(row.issue_cluster_id || '');
+      if (!key) continue;
+      if (!mappingMap.has(key)) {
+        mappingMap.set(key, []);
+      }
+      mappingMap.get(key).push(Number(row.news_id));
+    }
+
+    items = items.map(item => ({
+      ...item,
+      newsIds: Array.from(new Set(mappingMap.get(String(item.id)) || []))
+        .filter(value => Number.isFinite(value) && value > 0),
+    }));
+  }
+
+  const ranked = selectDailyEditionIssues(items, limit);
+  const publishedAt = new Date().toISOString();
+  const issueCount = ranked.length;
+  const readingMinutes = clampNumber(Math.round(issueCount * 1.4 + 2), 3, 8);
+
+  return jsonResponse({
+    success: true,
+    editionDate: publishedAt.slice(0, 10),
+    publishedAt,
+    issueCount,
+    readingMinutes,
+    topIssues: ranked.map((item, index) => ({
+      id: item.id,
+      rank: index + 1,
+      category: item.category,
+      keyword: item.keyword,
+      title: item.title,
+      summary: item.summary,
+      articleCount: item.articleCount,
+      sourceCount: item.sourceCount,
+      newsIds: item.newsIds || [],
+      score: item.score,
+      stage: item.stage,
+      lastSeenAt: item.lastSeenAt,
+      selectionReason: buildEditionSelectionReason(item),
+    })),
   }, corsHeaders);
 }
 
@@ -1494,6 +1591,115 @@ function shouldKeepIssueCluster({ currentCount, sourceCount, score, growthRate }
   if (currentCount >= 3 && score >= 62) return true;
   if (currentCount >= 2 && score >= 80 && Math.max(growthRate, 0) >= 50) return true;
   return false;
+}
+
+function selectDailyEditionIssues(items, limit = 3) {
+  const scored = (items || [])
+    .map(item => ({
+      ...item,
+      editionPriority: scoreDailyEditionIssue(item),
+    }))
+    .sort((a, b) => b.editionPriority - a.editionPriority || b.score - a.score || b.lastSeenAt.localeCompare(a.lastSeenAt));
+
+  const selected = [];
+  const categoryCounts = new Map();
+
+  for (const item of scored) {
+    if (selected.length >= limit) break;
+    const category = item.category || '기타';
+    const currentCount = categoryCounts.get(category) || 0;
+
+    if ((category === '경제' || category === '정치') && currentCount >= 1) {
+      continue;
+    }
+
+    if (selected.some(existing => existing.keyword === item.keyword)) {
+      continue;
+    }
+
+    selected.push(item);
+    categoryCounts.set(category, currentCount + 1);
+  }
+
+  if (selected.length < limit) {
+    for (const item of scored) {
+      if (selected.length >= limit) break;
+      if (selected.some(existing => existing.id === item.id)) continue;
+      selected.push(item);
+    }
+  }
+
+  return selected.slice(0, limit);
+}
+
+function scoreDailyEditionIssue(item) {
+  const text = `${item.category || ''} ${item.keyword || ''} ${item.title || ''} ${item.summary || ''}`.toLowerCase();
+  let score = Number(item.score || 0);
+
+  score += Math.min(Number(item.articleCount || 0) * 4, 24);
+  score += Math.min(Number(item.sourceCount || 0) * 7, 28);
+  score += Math.min(Math.max(Number(item.growthRate || 0), 0), 80);
+
+  const lastSeenAt = item.lastSeenAt ? new Date(item.lastSeenAt).getTime() : 0;
+  const ageHours = lastSeenAt > 0 ? (Date.now() - lastSeenAt) / (60 * 60 * 1000) : 0;
+  if (ageHours <= 3) score += 10;
+  else if (ageHours <= 8) score += 4;
+  else if (ageHours >= 18) score -= 8;
+
+  const categoryBoosts = {
+    '경제': 22,
+    '정치': 18,
+    '사회': 16,
+    '세계': 14,
+    'IT/과학': 10,
+    '생활/문화': 8,
+  };
+  score += categoryBoosts[item.category] || 0;
+
+  if (/(코스피|코스닥|증시|서킷|사이드카|급등|급락|폭등|폭락|환율|금리|반도체|관세|대출|물가|고용|세금|예산|연준|fomc|수급|외국인|기관|개미|실적|상한가|하한가)/i.test(text)) {
+    score += 24;
+  }
+  if (/(폭염|태풍|호우|지진|화재|파업|리콜|개인정보|해킹|정전|교통|운휴|보안|안전)/i.test(text)) {
+    score += 18;
+  }
+  if (/(대통령|국회|선거|법안|정책|정부)/i.test(text)) {
+    score += 10;
+  }
+  if (/(삼성전자|sk하이닉스|sk스퀘어|삼성전기|현대차|반도체|ai|엔비디아|테슬라)/i.test(text)) {
+    score += 10;
+  }
+
+  if (/(비트코인|가상자산|암호화폐|코인)/i.test(text)) {
+    score -= 18;
+  }
+  if (/(연예|스포츠|경기 결과|예능)/i.test(text)) {
+    score -= 10;
+  }
+  if (Number(item.sourceCount || 0) <= 1) {
+    score -= 8;
+  }
+
+  return Math.round(score);
+}
+
+function buildEditionSelectionReason(item) {
+  const reasons = [];
+  if ((item.category || '').trim()) {
+    reasons.push(item.category);
+  }
+  if (Number(item.articleCount || 0) > 0) {
+    reasons.push(`기사 ${item.articleCount}건`);
+  }
+  if (Number(item.sourceCount || 0) > 0) {
+    reasons.push(`출처 ${item.sourceCount}곳`);
+  }
+  if (Number(item.growthRate || 0) >= 50) {
+    reasons.push('확산 속도 높음');
+  }
+  if ((item.keyword || '').match(/코스피|코스닥|증시|환율|금리|반도체|서킷/i)) {
+    reasons.push('시장 영향도 높음');
+  }
+  return reasons.join(' · ');
 }
 
 async function buildLiveTrendTimelineFromTrends(env, period, category, limit, minScore) {
