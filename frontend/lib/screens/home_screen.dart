@@ -772,8 +772,6 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                     ),
                     const SizedBox(height: 10),
-                    _SentimentTemperatureCard(sentiment: insight.sentiment),
-                    const SizedBox(height: 10),
                     _TrendSearchBar(
                       controller: _searchController,
                       onSubmitted: (_) => _submitSearch(),
@@ -1016,7 +1014,6 @@ class _HomeScreenState extends State<HomeScreen>
               _TrendDashboardCard(
                 trendScore: trendScore,
                 trendDelta: trendDelta,
-                sentiment: insight.sentiment,
               ),
               const SizedBox(height: 14),
               _SearchDiscoverySection(
@@ -1072,8 +1069,6 @@ class _HomeScreenState extends State<HomeScreen>
                 categoryKeywords: categoryKeywords,
                 onKeywordTap: _openKeywordNews,
               ),
-              const SizedBox(height: 16),
-              _SentimentInsightPanel(sentiment: insight.sentiment),
             ],
           ),
         );
@@ -1099,11 +1094,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     final keywordScore = _trendRatioScale(keywordCount, 130);
     final risingScore = _trendRatioScale(risingCount, 90);
-    final sentimentScore =
-        1.0 - ((insight.sentiment.temperature - 50).abs() / 50).clamp(0, 1);
-
-    final mixed =
-        keywordScore * 0.43 + risingScore * 0.37 + sentimentScore * 0.20;
+    final mixed = keywordScore * 0.55 + risingScore * 0.45;
     return (12 + mixed * 76).round().clamp(0, 100);
   }
 
@@ -1127,20 +1118,14 @@ class _HomeScreenState extends State<HomeScreen>
     final rising = insight.risingIssues.take(2).map((e) => e.keyword).toList();
 
     if (keywords.isEmpty && rising.isEmpty) {
-      return 'AI가 오늘의 주요 이슈를 수집하고 있습니다.\n새 뉴스가 쌓이면 핵심 키워드와 분위기를 자동으로 요약합니다.';
+      return 'AI가 오늘의 주요 이슈를 수집하고 있습니다.\n새 뉴스가 쌓이면 핵심 키워드와 흐름을 자동으로 요약합니다.';
     }
 
     final keywordText = keywords.isEmpty ? '새로운 뉴스' : keywords.join(', ');
     final risingText = rising.isEmpty
         ? '뚜렷한 급상승 이슈는 아직 없습니다'
         : '${rising.join(', ')} 관련 뉴스가 빠르게 늘고 있습니다';
-    final mood = insight.sentiment.temperature >= 71
-        ? '기대감이 우세합니다'
-        : insight.sentiment.temperature <= 30
-            ? '불안감이 큽니다'
-            : '중립적인 흐름입니다';
-
-    return '오늘은 $keywordText 이슈가 많이 언급되고 있습니다.\n$risingText.\n전체 뉴스 분위기는 $mood.';
+    return '오늘은 $keywordText 이슈가 많이 언급되고 있습니다.\n$risingText.';
   }
 
   Map<String, List<TrendKeyword>> _buildCategoryHotKeywords(
@@ -1841,12 +1826,10 @@ class _AiBriefingCard extends StatelessWidget {
 class _TrendDashboardCard extends StatelessWidget {
   final int trendScore;
   final int trendDelta;
-  final NewsSentimentSummary sentiment;
 
   const _TrendDashboardCard({
     required this.trendScore,
     required this.trendDelta,
-    required this.sentiment,
   });
 
   @override
@@ -1908,35 +1891,13 @@ class _TrendDashboardCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _DashboardMetricCard(
-                  label: '오늘의 트렌드 점수',
-                  value: '$trendScore',
-                  suffix: '/100',
-                  icon: Icons.speed_rounded,
-                  color: const Color(0xFF2563EB),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _DashboardMetricCard(
-                  label: '뉴스 감정온도',
-                  value: '${sentiment.temperature}',
-                  suffix: '°',
-                  icon: Icons.thermostat_rounded,
-                  color: sentiment.temperature >= 71
-                      ? const Color(0xFF16A34A)
-                      : sentiment.temperature <= 30
-                          ? const Color(0xFFDC2626)
-                          : Colors.blueGrey,
-                ),
-              ),
-            ],
+          _DashboardMetricCard(
+            label: '오늘의 트렌드 점수',
+            value: '$trendScore',
+            suffix: '/100',
+            icon: Icons.speed_rounded,
+            color: const Color(0xFF2563EB),
           ),
-          const SizedBox(height: 12),
-          _SentimentRatioBar(sentiment: sentiment),
         ],
       ),
     );
@@ -2371,173 +2332,6 @@ class _CategoryHotCard extends StatelessWidget {
   }
 }
 
-class _SentimentInsightPanel extends StatelessWidget {
-  final NewsSentimentSummary sentiment;
-
-  const _SentimentInsightPanel({required this.sentiment});
-
-  @override
-  Widget build(BuildContext context) {
-    final temperatures = _buildSevenDayTemperatures(sentiment.temperature);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? const Color(0xFF111827) : Colors.white;
-    final border = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _InsightSectionTitle(
-            icon: Icons.insights_rounded,
-            title: '뉴스 감정 분석',
-            trailing: '최근 7일',
-          ),
-          const SizedBox(height: 14),
-          _SentimentTemperatureCard(sentiment: sentiment),
-          const SizedBox(height: 14),
-          _SevenDaySentimentChart(values: temperatures),
-        ],
-      ),
-    );
-  }
-
-  List<int> _buildSevenDayTemperatures(int current) {
-    return [
-      (current - 8).clamp(0, 100),
-      (current - 4).clamp(0, 100),
-      (current - 2).clamp(0, 100),
-      (current + 3).clamp(0, 100),
-      (current - 1).clamp(0, 100),
-      (current + 5).clamp(0, 100),
-      current,
-    ];
-  }
-}
-
-class _SevenDaySentimentChart extends StatelessWidget {
-  final List<int> values;
-
-  const _SevenDaySentimentChart({required this.values});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 86,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          for (int i = 0; i < values.length; i++) ...[
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: FractionallySizedBox(
-                        heightFactor: (values[i] / 100).clamp(0.08, 1.0),
-                        child: Container(
-                          width: 16,
-                          decoration: BoxDecoration(
-                            color: Colors.indigo.withOpacity(0.18 + i * 0.02),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    i == values.length - 1
-                        ? '오늘'
-                        : 'D-${values.length - 1 - i}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (i != values.length - 1) const SizedBox(width: 8),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SentimentRatioBar extends StatelessWidget {
-  final NewsSentimentSummary sentiment;
-
-  const _SentimentRatioBar({required this.sentiment});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: Row(
-            children: [
-              _RatioSegment(
-                value: sentiment.positiveRatio,
-                color: Colors.green,
-              ),
-              _RatioSegment(
-                value: sentiment.neutralRatio,
-                color: Colors.blueGrey,
-              ),
-              _RatioSegment(
-                value: sentiment.negativeRatio,
-                color: Colors.red,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '긍정 ${sentiment.positiveRatio}% · 중립 ${sentiment.neutralRatio}% · 부정 ${sentiment.negativeRatio}%',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade700,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _RatioSegment extends StatelessWidget {
-  final int value;
-  final Color color;
-
-  const _RatioSegment({
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      flex: value <= 0 ? 1 : value,
-      child: Container(
-        height: 9,
-        color: color.withOpacity(value <= 0 ? 0.08 : 0.72),
-      ),
-    );
-  }
-}
-
 class _TrendSearchBar extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onSubmitted;
@@ -2656,108 +2450,6 @@ class _KeywordChip extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SentimentTemperatureCard extends StatelessWidget {
-  final NewsSentimentSummary sentiment;
-
-  const _SentimentTemperatureCard({required this.sentiment});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryText = Theme.of(context).colorScheme.onSurface;
-    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
-    final color = sentiment.temperature >= 71
-        ? Colors.green
-        : sentiment.temperature <= 30
-            ? Colors.red
-            : Colors.blueGrey;
-
-    return Container(
-      padding: const EdgeInsets.all(11),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: color.withOpacity(0.16)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.thermostat_rounded, size: 17, color: color),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  '오늘 뉴스 감정온도',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w900,
-                    color: primaryText,
-                  ),
-                ),
-              ),
-              Text(
-                '${sentiment.temperature}°',
-                style: TextStyle(
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w900,
-                  color: color,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF111827)
-                      : Colors.white.withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  sentiment.temperature >= 71
-                      ? '긍정'
-                      : sentiment.temperature <= 30
-                          ? '부정'
-                          : '중립',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: sentiment.temperature / 100,
-              minHeight: 5.5,
-              backgroundColor: isDark
-                  ? const Color(0xFF1F2937)
-                  : Colors.white.withOpacity(0.8),
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            sentiment.summary,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11.5,
-              height: 1.35,
-              color: secondaryText,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
       ),
     );
   }

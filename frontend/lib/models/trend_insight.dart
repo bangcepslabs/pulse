@@ -148,6 +148,8 @@ class EditionIssue {
   final int articleCount;
   final int sourceCount;
   final List<int> newsIds;
+  final bool countsVerified;
+  final String thumbnailUrl;
   final double score;
   final String stage;
   final String lastSeenAt;
@@ -163,6 +165,8 @@ class EditionIssue {
     required this.articleCount,
     required this.sourceCount,
     required this.newsIds,
+    required this.countsVerified,
+    required this.thumbnailUrl,
     required this.score,
     required this.stage,
     required this.lastSeenAt,
@@ -183,6 +187,8 @@ class EditionIssue {
           .map((value) => _asInt(value))
           .where((value) => value > 0)
           .toList(),
+      countsVerified: json['countsVerified'] == true,
+      thumbnailUrl: json['thumbnailUrl'] as String? ?? '',
       score: _asDouble(json['score']),
       stage: json['stage'] as String? ?? 'rising',
       lastSeenAt: json['lastSeenAt'] as String? ?? '',

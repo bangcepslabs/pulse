@@ -379,6 +379,8 @@ async function handleGetTrendTimeline(url, env, corsHeaders) {
     firstSeenAt: row.first_seen_at || row.created_at || '',
     lastSeenAt: row.last_seen_at || row.updated_at || row.created_at || '',
     newsIds: [],
+    countsVerified: false,
+    thumbnailUrl: '',
   }));
 
   if (items.length === 0) {
@@ -454,6 +456,8 @@ async function handleGetDailyEdition(url, env, corsHeaders) {
     firstSeenAt: row.first_seen_at || row.created_at || '',
     lastSeenAt: row.last_seen_at || row.updated_at || row.created_at || '',
     newsIds: [],
+    countsVerified: false,
+    thumbnailUrl: '',
   }));
 
   if (items.length === 0) {
@@ -479,9 +483,62 @@ async function handleGetDailyEdition(url, env, corsHeaders) {
 
     items = items.map(item => ({
       ...item,
-      newsIds: Array.from(new Set(mappingMap.get(String(item.id)) || []))
+      newsIds: Array.from(new Set([
+        ...(Array.isArray(item.newsIds) ? item.newsIds : []),
+        ...(mappingMap.get(String(item.id)) || []),
+      ]))
         .filter(value => Number.isFinite(value) && value > 0),
     }));
+
+    const newsIds = Array.from(new Set(
+      items.flatMap(item => Array.isArray(item.newsIds) ? item.newsIds : [])
+    ));
+    if (newsIds.length > 0) {
+      const { data: articleRows, error: articleError } = await querySupabase(
+        env,
+        `trends?select=id,source,link,thumbnail_url&id=in.(${newsIds.join(',')})`
+      );
+
+      if (!articleError) {
+        const articleById = new Map(
+          (articleRows || []).map(row => [
+            Number(row.id),
+            {
+              source: String(row.source || '').trim().toLowerCase(),
+              key: normalizeLink(row.link) || `id:${Number(row.id)}`,
+              thumbnailUrl: String(row.thumbnail_url || '').trim(),
+            },
+          ])
+        );
+        items = items.map(item => {
+          const seenArticleKeys = new Set();
+          const resolvedNewsIds = item.newsIds.filter(id => {
+            const article = articleById.get(Number(id));
+            if (!article || seenArticleKeys.has(article.key)) {
+              return false;
+            }
+            seenArticleKeys.add(article.key);
+            return true;
+          });
+          const sources = new Set(
+            resolvedNewsIds
+              .map(id => articleById.get(Number(id))?.source)
+              .filter(Boolean)
+          );
+          const thumbnailUrl = resolvedNewsIds
+            .map(id => articleById.get(Number(id))?.thumbnailUrl)
+            .find(Boolean) || '';
+          return {
+            ...item,
+            newsIds: resolvedNewsIds,
+            articleCount: resolvedNewsIds.length,
+            sourceCount: sources.size,
+            countsVerified: resolvedNewsIds.length > 0,
+            thumbnailUrl,
+          };
+        });
+      }
+    }
   }
 
   const ranked = selectDailyEditionIssues(items, limit);
@@ -502,9 +559,11 @@ async function handleGetDailyEdition(url, env, corsHeaders) {
       keyword: item.keyword,
       title: item.title,
       summary: item.summary,
-      articleCount: item.articleCount,
-      sourceCount: item.sourceCount,
+      articleCount: item.countsVerified ? item.articleCount : 0,
+      sourceCount: item.countsVerified ? item.sourceCount : 0,
       newsIds: item.newsIds || [],
+      countsVerified: item.countsVerified === true,
+      thumbnailUrl: item.thumbnailUrl || '',
       score: item.score,
       stage: item.stage,
       lastSeenAt: item.lastSeenAt,

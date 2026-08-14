@@ -401,49 +401,401 @@ class _LandingScreenState extends State<LandingScreen>
         key: _scaffoldKey,
         backgroundColor: PulseUi.page(context),
         drawer: useDrawerNavigation ? _buildDrawer(context) : null,
-        body: SingleChildScrollView(
-          controller: _scrollController,
+        body: _buildHomeShell(isMobile),
+        bottomNavigationBar:
+            isMobile ? _buildHomeBottomNavigation() : null,
+      ),
+    );
+  }
+
+  Widget _buildHomeShell(bool isMobile) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final background = dark ? const Color(0xFF0B1220) : const Color(0xFFF5F7FB);
+
+    return ColoredBox(
+      color: background,
+      child: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _refreshHomeData,
+          color: const Color(0xFF2563EB),
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.only(bottom: isMobile ? 92 : 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildAppBar(isMobile),
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1120),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    KeyedSubtree(
+                      key: _editionSectionKey,
+                      child: _buildHomeTopNews(isMobile),
+                    ),
+                    KeyedSubtree(
+                      key: _updatesSectionKey,
+                      child: _buildHomeLivePreview(isMobile),
+                    ),
+                    KeyedSubtree(
+                      key: _marketSectionKey,
+                      child: _buildHomeMarketSummary(isMobile),
+                    ),
+                      ],
+                    ),
+                  ),
+                ),
+                _buildFooter(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeHeader(bool isMobile) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final foreground = dark ? Colors.white : const Color(0xFF0F172A);
+    final muted = dark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(isMobile ? 20 : 32, 10, isMobile ? 12 : 32, 8),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.asset(
+              'assets/icon/app_icon.png',
+              width: 32,
+              height: 32,
+              fit: BoxFit.cover,
+            ),
+          ),
+          const SizedBox(width: 9),
+          Text(
+            'Pulse',
+            style: TextStyle(
+              color: foreground,
+              fontSize: 21,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: '검색',
+            onPressed: _submitLandingSearch,
+            icon: Icon(Icons.search_rounded, color: muted),
+          ),
+          IconButton(
+            tooltip: dark ? '라이트 모드' : '다크 모드',
+            onPressed: () => ThemeController.instance.toggleThemeMode(
+              brightness: dark ? Brightness.dark : Brightness.light,
+            ),
+            icon: Icon(
+              dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              color: muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHomeTopNews(bool isMobile) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final foreground = dark ? Colors.white : const Color(0xFF0F172A);
+    final muted = dark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final border = dark ? const Color(0xFF243247) : const Color(0xFFE2E8F0);
+
+    return FutureBuilder<DailyEditionSnapshot>(
+      future: _editionFuture,
+      builder: (context, editionSnapshot) {
+        if (editionSnapshot.connectionState == ConnectionState.waiting) {
+          return _homeSectionFrame(
+            title: '메인 뉴스',
+            child: const _HomeLoadingLine(),
+          );
+        }
+
+        final edition = editionSnapshot.data;
+        final editionStories = edition?.topIssues
+                .take(5)
+                .map(_homeStoryFromEdition)
+                .toList() ??
+            const <_HomeStory>[];
+        if (editionStories.isNotEmpty) {
+          return _homeTopNewsContent(
+            stories: editionStories,
+            isMobile: isMobile,
+            foreground: foreground,
+            muted: muted,
+            border: border,
+          );
+        }
+
+        return FutureBuilder<List<TrendItem>>(
+          future: _latestNewsFuture,
+          builder: (context, newsSnapshot) {
+            final stories = (newsSnapshot.data ?? const <TrendItem>[])
+                .take(5)
+                .map(_homeStoryFromNews)
+                .toList();
+            if (stories.isEmpty &&
+                newsSnapshot.connectionState == ConnectionState.waiting) {
+              return _homeSectionFrame(
+                title: '메인 뉴스',
+                child: const _HomeLoadingLine(),
+              );
+            }
+            if (stories.isEmpty) {
+              return _homeSectionFrame(
+                title: '메인 뉴스',
+                child: Text(
+                  '현재 확인된 주요 뉴스가 없습니다.',
+                  style: TextStyle(color: muted, fontSize: 13),
+                ),
+              );
+            }
+            return _homeTopNewsContent(
+              stories: stories,
+              isMobile: isMobile,
+              foreground: foreground,
+              muted: muted,
+              border: border,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _homeTopNewsContent({
+    required List<_HomeStory> stories,
+    required bool isMobile,
+    required Color foreground,
+    required Color muted,
+    required Color border,
+  }) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(isMobile ? 20 : 32, 16, isMobile ? 20 : 32, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '메인 뉴스',
+            style: TextStyle(
+              color: foreground,
+              fontSize: isMobile ? 22 : 26,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _HomeStoryCarousel(
+            stories: stories,
+            foreground: foreground,
+            muted: muted,
+            border: border,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _homeSectionFrame({required String title, required Widget child}) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final foreground = dark ? Colors.white : const Color(0xFF0F172A);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(color: foreground, fontSize: 22, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+
+  _HomeStory _homeStoryFromEdition(EditionIssue issue) {
+    return _HomeStory(
+      title: issue.title.trim().isEmpty ? issue.keyword : issue.title,
+      summary: issue.summary,
+      category: issue.category,
+      time: _landingRelativeTimeLabel(_landingParseTimestamp(issue.lastSeenAt)),
+      meta: issue.countsVerified
+          ? [
+              if (issue.articleCount > 0) '기사 ${issue.articleCount}건',
+              if (issue.sourceCount > 0) '출처 ${issue.sourceCount}곳',
+            ].join(' · ')
+          : '관련 기사 확인 중',
+      context: _editionIssueContext(issue),
+      thumbnailUrl: issue.thumbnailUrl,
+      onTap: () => _openLandingEditionIssue(issue),
+    );
+  }
+
+  String _editionIssueContext(EditionIssue issue) {
+    final countLabel = RegExp(r'^(관련\s*)?기사\s*\d+건$|^출처\s*\d+곳$');
+    return issue.selectionReason
+        .split('·')
+        .map((part) => part.trim())
+        .where(
+          (part) =>
+              part.isNotEmpty && part != issue.category && !countLabel.hasMatch(part),
+        )
+        .join(' · ');
+  }
+
+  _HomeStory _homeStoryFromNews(TrendItem item) {
+    return _HomeStory(
+      title: item.koreanTitle,
+      summary: item.summaryKr,
+      category: item.category,
+      time: _landingRelativeTimeLabel(_landingTrendDate(item)),
+      meta: item.source.trim().isEmpty
+          ? ''
+          : '출처 ${_landingSourceLabel(item.source) ?? item.source}',
+      thumbnailUrl: item.thumbnailUrl,
+      onTap: () => _openLandingTrendItemArticle(item),
+    );
+  }
+
+  Widget _buildHomeLivePreview(bool isMobile) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final foreground = dark ? Colors.white : const Color(0xFF0F172A);
+    final muted = dark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final border = dark ? const Color(0xFF243247) : const Color(0xFFE2E8F0);
+    return FutureBuilder<List<IssueTimelineItem>>(
+      future: _timelineFuture,
+      builder: (context, snapshot) {
+        final items = snapshot.data ?? const <IssueTimelineItem>[];
+        return Padding(
+          padding: EdgeInsets.fromLTRB(isMobile ? 20 : 32, 0, isMobile ? 20 : 32, 28),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildAppBar(isMobile),
-              KeyedSubtree(
-                key: _editionSectionKey,
-                child: _FadeInOnScroll(child: _buildPlatformHero(isMobile)),
+              Row(
+                children: [
+                  Expanded(child: Text('실시간 흐름', style: TextStyle(color: foreground, fontSize: isMobile ? 21 : 24, fontWeight: FontWeight.w700))),
+                  TextButton(onPressed: () => _openPage(const HomeScreen()), child: const Text('실시간 보기')),
+                ],
               ),
-              _FadeInOnScroll(
-                delay: 70,
-                child: KeyedSubtree(
-                  key: _updatesSectionKey,
-                  child: _buildBreakingNewsSection(isMobile),
-                ),
-              ),
-              _FadeInOnScroll(
-                delay: 120,
-                child: _buildMarketMoodSection(isMobile),
-              ),
-              _FadeInOnScroll(
-                delay: 170,
-                child: KeyedSubtree(
-                  key: _marketSectionKey,
-                  child: _buildMarketOverviewSection(isMobile),
-                ),
-              ),
-              _FadeInOnScroll(
-                delay: 220,
-                child: _buildExchangeRateSection(isMobile),
-              ),
-              _FadeInOnScroll(
-                delay: 250,
-                child: _buildPopularStocksSection(isMobile),
-              ),
-              _FadeInOnScroll(
-                delay: 300,
-                child: _buildMarketDominanceSection(isMobile),
-              ),
-              const SizedBox(height: 32),
-              _buildFooter(),
+              const SizedBox(height: 6),
+              if (snapshot.connectionState == ConnectionState.waiting)
+                const _HomeLoadingLine()
+              else if (snapshot.hasError)
+                Text('새롭게 확인된 소식을 불러오지 못했습니다.', style: TextStyle(color: muted, fontSize: 13))
+              else if (items.isEmpty)
+                Text('새롭게 확인된 소식이 없습니다.', style: TextStyle(color: muted, fontSize: 13))
+              else
+                ...items.take(5).map((item) => _HomeLiveStory(
+                      item: item,
+                      foreground: foreground,
+                      muted: muted,
+                      border: border,
+                      onTap: () => _openLandingTimelineItem(item),
+                    )),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHomeMarketSummary(bool isMobile) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final foreground = dark ? Colors.white : const Color(0xFF0F172A);
+    final muted = dark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final border = dark ? const Color(0xFF243247) : const Color(0xFFE2E8F0);
+    final targets = ['코스피', '코스닥', '나스닥100 선물', 'USD/KRW']
+        .map((title) => _landingQuoteByTitle(_marketQuotes, title))
+        .whereType<_LandingMarketQuote>()
+        .toList();
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(isMobile ? 20 : 32, 0, isMobile ? 20 : 32, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('시장 분위기', style: TextStyle(color: foreground, fontSize: isMobile ? 21 : 24, fontWeight: FontWeight.w700))),
+              TextButton(onPressed: () => _openPage(const MarketPage()), child: const Text('시장 보기')),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_marketRefreshing && targets.isEmpty)
+            const _HomeLoadingLine()
+          else if (_marketError != null && targets.isEmpty)
+            Text('시장 정보를 불러오지 못했습니다.', style: TextStyle(color: muted, fontSize: 13))
+          else if (targets.isEmpty)
+            Text('현재 시장 정보가 없습니다.', style: TextStyle(color: muted, fontSize: 13))
+          else
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: dark ? const Color(0xFF111C30) : Colors.white,
+                border: Border.all(color: border),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: targets.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: isMobile ? 2 : 4,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: isMobile ? 1.28 : 1.45,
+                  ),
+                  itemBuilder: (context, index) => _HomeMarketValue(
+                    quote: targets[index],
+                    foreground: foreground,
+                    muted: muted,
+                    isMobile: isMobile,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _refreshHomeData() async {
+    if (!mounted) return;
+    setState(() {
+      _editionFuture = _api.fetchDailyEdition();
+      _insightFuture = _api.fetchTrendInsights();
+      _timelineFuture = _api.fetchTrendTimeline(period: '24h', limit: 5, minScore: 45);
+      _latestNewsFuture = _api.fetchTrends(limit: 12, sort: 'latest', period: '24h');
+    });
+    await _refreshMarketData(force: true);
+  }
+
+  Widget _buildHomeBottomNavigation() {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final bg = dark ? const Color(0xFF111827) : Colors.white;
+    return SafeArea(
+      top: false,
+      child: Container(
+        color: bg,
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 7),
+        child: Row(
+          children: [
+            _HomeNavItem(icon: Icons.home_rounded, label: '홈', active: true, onTap: () => _scrollToSection(_editionSectionKey)),
+            _HomeNavItem(icon: Icons.bolt_rounded, label: '실시간', onTap: () => _openPage(const HomeScreen())),
+            _HomeNavItem(icon: Icons.explore_outlined, label: '탐색', onTap: () => _openPage(const HomeScreen())),
+            _HomeNavItem(icon: Icons.show_chart_rounded, label: '시장', onTap: () => _openPage(const MarketPage())),
+            _HomeNavItem(icon: Icons.person_outline_rounded, label: 'MY', onTap: () => _openPage(const ContactPage())),
+          ].map((item) => Expanded(child: item)).toList(),
         ),
       ),
     );
@@ -642,7 +994,7 @@ class _LandingScreenState extends State<LandingScreen>
                       ),
                       const SizedBox(width: 24),
                       _navItem(
-                        '전체 뉴스',
+                        '실시간 뉴스',
                         () => _openPage(const HomeScreen()),
                       ),
                       const SizedBox(width: 24),
@@ -836,7 +1188,7 @@ class _LandingScreenState extends State<LandingScreen>
                       context: context,
                       isDark: isDark,
                       icon: Icons.newspaper_rounded,
-                      title: '전체 뉴스',
+                      title: '실시간 뉴스',
                       subtitle: '카테고리별 기사 보기',
                       onTap: () {
                         Navigator.pop(context);
@@ -2272,6 +2624,7 @@ class _LandingScreenState extends State<LandingScreen>
       required double currentPrice,
       required double percentChange,
       required DateTime? updatedAt,
+      List<double> chartData = const <double>[],
     }) {
       return _LandingMarketQuote(
         symbol: symbol,
@@ -2282,6 +2635,7 @@ class _LandingScreenState extends State<LandingScreen>
         currentPrice: currentPrice,
         percentChange: percentChange,
         priceUpdatedAt: updatedAt,
+        chartData: chartData,
       );
     }
 
@@ -2292,6 +2646,7 @@ class _LandingScreenState extends State<LandingScreen>
         currentPrice: usdKrw.currentPrice,
         percentChange: usdKrw.percentChange,
         updatedAt: usdKrw.priceUpdatedAt,
+        chartData: usdKrw.chartData,
       )!);
     }
 
@@ -3601,6 +3956,26 @@ class _LandingScreenState extends State<LandingScreen>
               children: [
                 const _LandingFooterBrandBlock(),
                 const SizedBox(height: 16),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    TextButton(
+                      onPressed: () => _openPage(const HomeScreen()),
+                      child: const Text('실시간 뉴스'),
+                    ),
+                    TextButton(
+                      onPressed: () => _openPage(const MarketPage()),
+                      child: const Text('증시'),
+                    ),
+                    TextButton(
+                      onPressed: () => _openPage(const ContactPage()),
+                      child: const Text('개인정보처리방침'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 Text(
                   '© 2026 Pulse',
                   style: TextStyle(
@@ -8513,6 +8888,479 @@ class _LandingMarketQuote {
     required this.priceUpdatedAt,
     this.chartData = const [],
   });
+}
+
+class _HomeStory {
+  final String title;
+  final String summary;
+  final String category;
+  final String time;
+  final String meta;
+  final String context;
+  final String thumbnailUrl;
+  final VoidCallback onTap;
+
+  const _HomeStory({
+    required this.title,
+    required this.summary,
+    required this.category,
+    required this.time,
+    this.meta = '',
+    this.context = '',
+    this.thumbnailUrl = '',
+    required this.onTap,
+  });
+}
+
+class _HomeStoryCarousel extends StatefulWidget {
+  final List<_HomeStory> stories;
+  final Color foreground;
+  final Color muted;
+  final Color border;
+
+  const _HomeStoryCarousel({
+    required this.stories,
+    required this.foreground,
+    required this.muted,
+    required this.border,
+  });
+
+  @override
+  State<_HomeStoryCarousel> createState() => _HomeStoryCarouselState();
+}
+
+class _HomeStoryCarouselState extends State<_HomeStoryCarousel> {
+  late final PageController _controller;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final surface = dark ? const Color(0xFF111C30) : Colors.white;
+    final height = MediaQuery.sizeOf(context).width < 768 ? 268.0 : 240.0;
+
+    return Column(
+      children: [
+        SizedBox(
+          height: height,
+          child: PageView.builder(
+            controller: _controller,
+            itemCount: widget.stories.length,
+            onPageChanged: (index) => setState(() => _currentIndex = index),
+            itemBuilder: (context, index) {
+              final story = widget.stories[index];
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 1),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: surface,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: widget.border),
+                ),
+                child: _HomeFeaturedStory(
+                  story: story,
+                  foreground: widget.foreground,
+                  muted: widget.muted,
+                  onTap: story.onTap,
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Wrap(
+              spacing: 6,
+              children: List.generate(widget.stories.length, (index) {
+                final active = index == _currentIndex;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: active ? 18 : 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: active ? const Color(0xFF2563EB) : widget.border,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                );
+              }),
+            ),
+            const Spacer(),
+            Text(
+              '${_currentIndex + 1} / ${widget.stories.length}',
+              style: TextStyle(
+                color: widget.muted,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeLoadingLine extends StatelessWidget {
+  const _HomeLoadingLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      height: 42,
+      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+    );
+  }
+}
+
+class _HomeFeaturedStory extends StatelessWidget {
+  final _HomeStory story;
+  final Color foreground;
+  final Color muted;
+  final VoidCallback onTap;
+
+  const _HomeFeaturedStory({
+    required this.story,
+    required this.foreground,
+    required this.muted,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final thumbnailSize = MediaQuery.sizeOf(context).width < 768 ? 88.0 : 104.0;
+    final thumbnailUrl = story.thumbnailUrl.trim();
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          story.category.isEmpty ? '주요 뉴스' : story.category,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF2563EB),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(story.time, style: TextStyle(color: muted, fontSize: 11)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    story.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: foreground,
+                      fontSize: 20,
+                      height: 1.25,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (story.summary.trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      story.summary.trim(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: muted, fontSize: 13, height: 1.45),
+                    ),
+                  ],
+                  if (story.context.trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      story.context.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: muted, fontSize: 11.5, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                  if (story.meta.trim().isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      story.meta.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: muted, fontSize: 11),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Text('자세히 보기', style: TextStyle(color: foreground, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.arrow_forward_rounded, size: 15, color: Color(0xFF2563EB)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (thumbnailUrl.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              SizedBox(
+                width: thumbnailSize,
+                height: thumbnailSize,
+                child: NetworkThumbnail(
+                  imageUrl: thumbnailUrl,
+                  fit: BoxFit.cover,
+                  borderRadius: BorderRadius.circular(10),
+                  loadingWidget: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9),
+                    ),
+                  ),
+                  errorWidget: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9),
+                    ),
+                    child: Icon(Icons.image_not_supported_outlined, size: 18, color: muted),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeSecondaryStory extends StatelessWidget {
+  final _HomeStory story;
+  final Color foreground;
+  final Color muted;
+
+  const _HomeSecondaryStory({
+    required this.story,
+    required this.foreground,
+    required this.muted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: story.onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${story.category.isEmpty ? '뉴스' : story.category} · ${story.time}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    story.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: foreground, fontSize: 15, height: 1.35, fontWeight: FontWeight.w700),
+                  ),
+                  if (story.meta.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(story.meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 11)),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right_rounded, color: muted, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeLiveStory extends StatelessWidget {
+  final IssueTimelineItem item;
+  final Color foreground;
+  final Color muted;
+  final Color border;
+  final VoidCallback onTap;
+
+  const _HomeLiveStory({
+    required this.item,
+    required this.foreground,
+    required this.muted,
+    required this.border,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final title = item.title.trim().isEmpty ? item.keyword : item.title;
+    final summary = item.summary.trim();
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: border))),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 48,
+              child: Text(
+                _landingClockLabel(_landingParseTimestamp(item.lastSeenAt)),
+                style: TextStyle(color: muted, fontSize: 11.5, fontWeight: FontWeight.w700),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${item.category.isEmpty ? '이슈' : item.category} · ${_landingTimelineStageLabel(item.stage)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Color(0xFF2563EB), fontSize: 11.5, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontSize: 14.5, height: 1.35, fontWeight: FontWeight.w700)),
+                  if (summary.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(summary, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 11.5)),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right_rounded, color: muted, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeMarketValue extends StatelessWidget {
+  final _LandingMarketQuote quote;
+  final Color foreground;
+  final Color muted;
+  final bool isMobile;
+
+  const _HomeMarketValue({
+    required this.quote,
+    required this.foreground,
+    required this.muted,
+    required this.isMobile,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isPositive = quote.percentChange >= 0;
+    final changeColor = isPositive ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final tileSurface = dark ? const Color(0xFF16233A) : const Color(0xFFF8FAFC);
+    final tileBorder = dark ? const Color(0xFF2A3B55) : const Color(0xFFE2E8F0);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+      decoration: BoxDecoration(
+        color: tileSurface,
+        border: Border.all(color: tileBorder),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            quote.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: muted, fontSize: isMobile ? 11 : 11.5, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _landingMarketPriceLabel(quote),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: foreground, fontSize: isMobile ? 14 : 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                _landingFormatPercent(quote.percentChange),
+                style: TextStyle(color: changeColor, fontSize: 10.5, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: SizedBox(
+              width: double.infinity,
+              child: quote.chartData.length > 1
+                  ? _LandingSparkline(values: quote.chartData, color: changeColor)
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeNavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _HomeNavItem({required this.icon, required this.label, this.active = false, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final color = active ? const Color(0xFF2563EB) : (dark ? const Color(0xFF94A3B8) : const Color(0xFF64748B));
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: color, size: 21),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(color: color, fontSize: 10.5, fontWeight: active ? FontWeight.w700 : FontWeight.w600)),
+        ]),
+      ),
+    );
+  }
 }
 
 class _LandingSectorDominanceRowData {
