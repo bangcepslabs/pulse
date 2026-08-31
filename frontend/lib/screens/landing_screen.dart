@@ -9862,19 +9862,30 @@ class _HomeStoryCarouselState extends State<_HomeStoryCarousel> {
             onPageChanged: (index) => setState(() => _currentIndex = index),
             itemBuilder: (context, index) {
               final story = widget.stories[index];
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 1),
-                padding: EdgeInsets.all(isMobile ? 16 : 18),
-                decoration: BoxDecoration(
-                  color: surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: widget.border),
-                ),
-                child: _HomeFeaturedStory(
-                  story: story,
-                  foreground: widget.foreground,
-                  muted: widget.muted,
-                  onTap: story.onTap,
+              final active = index == _currentIndex;
+              return AnimatedScale(
+                scale: active ? 1 : 0.985,
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                child: AnimatedOpacity(
+                  opacity: active ? 1 : 0.9,
+                  duration: const Duration(milliseconds: 220),
+                  child: Container(
+                    key: ValueKey('${story.title}-$index'),
+                    margin: const EdgeInsets.symmetric(horizontal: 1),
+                    padding: EdgeInsets.all(isMobile ? 16 : 18),
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: widget.border),
+                    ),
+                    child: _HomeFeaturedStory(
+                      story: story,
+                      foreground: widget.foreground,
+                      muted: widget.muted,
+                      onTap: story.onTap,
+                    ),
+                  ),
                 ),
               );
             },
