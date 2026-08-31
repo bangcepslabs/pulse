@@ -570,57 +570,65 @@ class _LandingScreenState extends State<LandingScreen>
   }) {
     return Padding(
       padding:
-          EdgeInsets.fromLTRB(isMobile ? 20 : 32, 16, isMobile ? 20 : 32, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '오늘의 핵심 이슈',
-                      style: TextStyle(
-                        color: const Color(0xFF2563EB),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '메인 뉴스',
-                      style: TextStyle(
-                        color: foreground,
-                        fontSize: isMobile ? 22 : 26,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          EdgeInsets.fromLTRB(isMobile ? 20 : 32, 16, isMobile ? 20 : 32, 20),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFF2563EB).withValues(alpha: 0.045),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: const Color(0xFF2563EB).withValues(alpha: 0.10),
           ),
-          const SizedBox(height: 10),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withValues(alpha: 0.035),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(5),
-              child: _HomeStoryCarousel(
+        ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            isMobile ? 14 : 18,
+            isMobile ? 15 : 18,
+            isMobile ? 14 : 18,
+            isMobile ? 14 : 18,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '오늘의 핵심 이슈',
+                          style: TextStyle(
+                            color: const Color(0xFF2563EB),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '메인 뉴스',
+                          style: TextStyle(
+                            color: foreground,
+                            fontSize: isMobile ? 22 : 26,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _HomeStoryCarousel(
                 stories: stories,
                 foreground: foreground,
                 muted: muted,
                 border: border,
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1011,13 +1019,15 @@ class _LandingScreenState extends State<LandingScreen>
                       style: TextStyle(color: muted, fontSize: 13),
                     )
                   else
-                    ...items.take(5).map(
-                          (item) => _HomeLiveArticleStory(
-                            item: item,
+                    ...items.take(5).toList().asMap().entries.map(
+                          (entry) => _HomeLiveArticleStory(
+                            index: entry.key,
+                            item: entry.value,
                             foreground: foreground,
                             muted: muted,
                             border: border,
-                            onTap: () => _openLandingTrendItemArticle(item),
+                            onTap: () =>
+                                _openLandingTrendItemArticle(entry.value),
                           ),
                         ),
                 ],
@@ -1076,25 +1086,30 @@ class _LandingScreenState extends State<LandingScreen>
               decoration: BoxDecoration(
                 color: dark ? const Color(0xFF111C30) : Colors.white,
                 border: Border.all(color: border),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: targets.length,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: isMobile ? 2 : 4,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: isMobile ? 1.28 : 1.45,
-                  ),
-                  itemBuilder: (context, index) => _HomeMarketValue(
-                    quote: targets[index],
-                    foreground: foreground,
-                    muted: muted,
-                    isMobile: isMobile,
+                padding: EdgeInsets.fromLTRB(
+                    isMobile ? 12 : 16, 12, isMobile ? 0 : 16, 12),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (var index = 0; index < targets.length; index++)
+                        Padding(
+                          padding: EdgeInsets.only(
+                              right: index == targets.length - 1 ? 0 : 10),
+                          child: SizedBox(
+                            width: isMobile ? 142 : 158,
+                            child: _HomeMarketValue(
+                              quote: targets[index],
+                              foreground: foreground,
+                              muted: muted,
+                              isMobile: isMobile,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -10210,6 +10225,7 @@ class _HomeSecondaryStory extends StatelessWidget {
 }
 
 class _HomeLiveArticleStory extends StatelessWidget {
+  final int index;
   final TrendItem item;
   final Color foreground;
   final Color muted;
@@ -10217,6 +10233,7 @@ class _HomeLiveArticleStory extends StatelessWidget {
   final VoidCallback onTap;
 
   const _HomeLiveArticleStory({
+    required this.index,
     required this.item,
     required this.foreground,
     required this.muted,
@@ -10237,8 +10254,19 @@ class _HomeLiveArticleStory extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 42,
+            Container(
+              width: 48,
+              padding: const EdgeInsets.only(right: 10),
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: index == 0
+                        ? const Color(0xFF2563EB).withValues(alpha: 0.55)
+                        : border,
+                    width: index == 0 ? 2 : 1,
+                  ),
+                ),
+              ),
               child: Text(
                 _landingClockLabel(
                   _landingParseTimestamp(
@@ -10246,7 +10274,9 @@ class _HomeLiveArticleStory extends StatelessWidget {
                   ),
                 ),
                 style: TextStyle(
-                    color: muted, fontSize: 11, fontWeight: FontWeight.w600),
+                    color: index == 0 ? const Color(0xFF2563EB) : muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700),
               ),
             ),
             Expanded(
