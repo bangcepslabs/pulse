@@ -602,10 +602,6 @@ class _LandingScreenState extends State<LandingScreen>
                   ],
                 ),
               ),
-              Text(
-                '넘겨보기',
-                style: TextStyle(color: muted, fontSize: 10.5),
-              ),
             ],
           ),
           const SizedBox(height: 10),
