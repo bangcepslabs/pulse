@@ -574,20 +574,55 @@ class _LandingScreenState extends State<LandingScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '메인 뉴스',
-            style: TextStyle(
-              color: foreground,
-              fontSize: isMobile ? 22 : 26,
-              fontWeight: FontWeight.w700,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '오늘의 핵심 이슈',
+                      style: TextStyle(
+                        color: const Color(0xFF2563EB),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '메인 뉴스',
+                      style: TextStyle(
+                        color: foreground,
+                        fontSize: isMobile ? 22 : 26,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '넘겨보기',
+                style: TextStyle(color: muted, fontSize: 10.5),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          _HomeStoryCarousel(
-            stories: stories,
-            foreground: foreground,
-            muted: muted,
-            border: border,
+          const SizedBox(height: 10),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xFF2563EB).withValues(alpha: 0.035),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(5),
+              child: _HomeStoryCarousel(
+                stories: stories,
+                foreground: foreground,
+                muted: muted,
+                border: border,
+              ),
+            ),
           ),
         ],
       ),
@@ -943,6 +978,28 @@ class _LandingScreenState extends State<LandingScreen>
                     ],
                   ),
                   const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF2563EB),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '방금 업데이트된 뉴스',
+                        style: TextStyle(
+                          color: muted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
                   if (editionSnapshot.connectionState ==
                           ConnectionState.waiting ||
                       newsSnapshot.connectionState == ConnectionState.waiting)
@@ -1004,6 +1061,10 @@ class _LandingScreenState extends State<LandingScreen>
                   onPressed: () => _openPage(const MarketPage()),
                   child: const Text('시장 보기')),
             ],
+          ),
+          Text(
+            '오늘의 주요 지수와 환율',
+            style: TextStyle(color: muted, fontSize: 11),
           ),
           const SizedBox(height: 8),
           if (_marketRefreshing && targets.isEmpty)
