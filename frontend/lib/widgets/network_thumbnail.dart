@@ -11,6 +11,7 @@ class NetworkThumbnail extends StatefulWidget {
   final double? aspectRatio;
   final BorderRadius? borderRadius;
   final bool collapseOnError;
+  final VoidCallback? onError;
 
   const NetworkThumbnail({
     super.key,
@@ -21,6 +22,7 @@ class NetworkThumbnail extends StatefulWidget {
     this.aspectRatio,
     this.borderRadius,
     this.collapseOnError = false,
+    this.onError,
   });
 
   @override
@@ -46,6 +48,7 @@ class _NetworkThumbnailState extends State<NetworkThumbnail> {
         setState(() {
           _failed = true;
         });
+        widget.onError?.call();
       },
     );
 

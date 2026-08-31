@@ -4,6 +4,7 @@ class TrendItem {
   final String koreanTitle;
   final String summaryKr;
   final int importance;
+  final int? mainWorthiness;
   final List<String> tickers;
   final String category;
   final String link;
@@ -18,6 +19,7 @@ class TrendItem {
     required this.koreanTitle,
     required this.summaryKr,
     required this.importance,
+    this.mainWorthiness,
     required this.tickers,
     required this.category,
     required this.link,
@@ -51,6 +53,15 @@ class TrendItem {
             ? rawImp
             : int.tryParse(rawImp?.toString() ?? '') ?? 3)
         .clamp(1, 5);
+    final rawMainWorthiness = json['main_worthiness'];
+    final parsedMainWorthiness = rawMainWorthiness is int
+        ? rawMainWorthiness
+        : int.tryParse(rawMainWorthiness?.toString() ?? '');
+    final mainWorthiness = parsedMainWorthiness != null &&
+            parsedMainWorthiness >= 1 &&
+            parsedMainWorthiness <= 5
+        ? parsedMainWorthiness
+        : null;
 
     // tickers: List or comma-separated String or null
     List<String> tickers;
@@ -77,6 +88,7 @@ class TrendItem {
           : json['korean_title'] as String,
       summaryKr: json['summary_kr'] as String? ?? '',
       importance: importance,
+      mainWorthiness: mainWorthiness,
       tickers: tickers,
       category: json['category'] as String? ?? '일반',
       link: json['link'] as String? ?? '',
@@ -95,6 +107,7 @@ class TrendItem {
       'korean_title': koreanTitle,
       'summary_kr': summaryKr,
       'importance': importance,
+      'main_worthiness': mainWorthiness,
       'tickers': tickers,
       'category': category,
       'link': link,

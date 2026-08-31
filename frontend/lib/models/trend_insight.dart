@@ -154,6 +154,8 @@ class EditionIssue {
   final String stage;
   final String lastSeenAt;
   final String selectionReason;
+  final String? newFinding;
+  final List<IssueTimelineEvent> timeline;
 
   const EditionIssue({
     required this.id,
@@ -171,9 +173,12 @@ class EditionIssue {
     required this.stage,
     required this.lastSeenAt,
     required this.selectionReason,
+    this.newFinding,
+    this.timeline = const [],
   });
 
   factory EditionIssue.fromJson(Map<String, dynamic> json) {
+    final newFinding = json['newFinding']?.toString().trim();
     return EditionIssue(
       id: json['id'] as String? ?? '',
       rank: _asInt(json['rank']),
@@ -193,6 +198,35 @@ class EditionIssue {
       stage: json['stage'] as String? ?? 'rising',
       lastSeenAt: json['lastSeenAt'] as String? ?? '',
       selectionReason: json['selectionReason'] as String? ?? '',
+      newFinding: newFinding == null || newFinding.isEmpty ? null : newFinding,
+      timeline: (json['timeline'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(IssueTimelineEvent.fromJson)
+          .where((item) => item.isUsable)
+          .toList(),
+    );
+  }
+}
+
+class IssueTimelineEvent {
+  final String occurredAt;
+  final String description;
+  final String? context;
+
+  const IssueTimelineEvent({
+    required this.occurredAt,
+    required this.description,
+    this.context,
+  });
+
+  bool get isUsable => occurredAt.trim().isNotEmpty && description.trim().isNotEmpty;
+
+  factory IssueTimelineEvent.fromJson(Map<String, dynamic> json) {
+    final context = (json['context'] as String?)?.trim();
+    return IssueTimelineEvent(
+      occurredAt: json['occurredAt'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      context: context == null || context.isEmpty ? null : context,
     );
   }
 }

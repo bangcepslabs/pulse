@@ -359,17 +359,20 @@ class ApiService {
 
     return {
       'id': json['id'],
-      'korean_title': json['title'],
-      'original_title': json['original_title'] ?? json['title'],
-      'summary_kr': json['summary'],
+      'korean_title': json['title'] ?? json['korean_title'],
+      'original_title':
+          json['original_title'] ?? json['title'] ?? json['korean_title'],
+      'summary_kr': json['summary'] ?? json['summary_kr'],
       'importance': json['importance'],
       'tickers': const <String>[],
       'category': json['category'],
       'link': json['link'],
       'source': json['source'],
       'thumbnail_url': json['thumbnailUrl'] ?? json['thumbnail_url'],
-      'published': json['publishedAt'],
-      'created_at': json['publishedAt'],
+      'published':
+          json['publishedAt'] ?? json['published'] ?? json['createdAt'] ?? json['created_at'],
+      'created_at':
+          json['createdAt'] ?? json['created_at'] ?? json['publishedAt'] ?? json['published'],
       'view_count': 0,
     };
   }
