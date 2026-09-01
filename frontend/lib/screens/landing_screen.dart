@@ -431,7 +431,7 @@ class _LandingScreenState extends State<LandingScreen>
                 _buildAppBar(isMobile),
                 Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1120),
+                    constraints: const BoxConstraints(maxWidth: 1180),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1091,27 +1091,34 @@ class _LandingScreenState extends State<LandingScreen>
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
                     isMobile ? 12 : 16, 12, isMobile ? 0 : 16, 12),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (var index = 0; index < targets.length; index++)
-                        Padding(
-                          padding: EdgeInsets.only(
-                              right: index == targets.length - 1 ? 0 : 10),
-                          child: SizedBox(
-                            width: isMobile ? 142 : 158,
-                            height: isMobile ? 104 : 112,
-                            child: _HomeMarketValue(
-                              quote: targets[index],
-                              foreground: foreground,
-                              muted: muted,
-                              isMobile: isMobile,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cardWidth = isMobile
+                        ? 142.0
+                        : (constraints.maxWidth - 30) / targets.length;
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (var index = 0; index < targets.length; index++)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                  right: index == targets.length - 1 ? 0 : 10),
+                              child: SizedBox(
+                                width: cardWidth,
+                                height: isMobile ? 104 : 112,
+                                child: _HomeMarketValue(
+                                  quote: targets[index],
+                                  foreground: foreground,
+                                  muted: muted,
+                                  isMobile: isMobile,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                    ],
-                  ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -4339,11 +4346,11 @@ class _LandingScreenState extends State<LandingScreen>
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: PulseUi.maxContentWidth),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: Column(
               children: [
                 const _LandingFooterBrandBlock(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 6),
                 Wrap(
                   alignment: WrapAlignment.center,
                   spacing: 8,
@@ -4363,11 +4370,11 @@ class _LandingScreenState extends State<LandingScreen>
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 2),
                 Text(
                   '© 2026 Pulse',
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 11,
                     color: isDark ? Colors.grey.shade400 : Colors.grey.shade500,
                   ),
                 ),
@@ -9923,7 +9930,7 @@ class _HomeStoryCarouselState extends State<_HomeStoryCarousel> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final surface = dark ? const Color(0xFF111C30) : Colors.white;
     final isMobile = MediaQuery.sizeOf(context).width < 768;
-    final height = isMobile ? 190.0 : 230.0;
+    final height = isMobile ? 190.0 : 226.0;
 
     return Column(
       children: [
@@ -10042,8 +10049,8 @@ class _HomeFeaturedStoryState extends State<_HomeFeaturedStory> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isMobile = MediaQuery.sizeOf(context).width < 768;
-    final thumbnailWidth = isMobile ? 112.0 : 128.0;
-    final thumbnailHeight = isMobile ? 102.0 : 108.0;
+    final thumbnailWidth = isMobile ? 112.0 : 320.0;
+    final thumbnailHeight = isMobile ? 102.0 : 180.0;
     final story = widget.story;
     final foreground = widget.foreground;
     final muted = widget.muted;
