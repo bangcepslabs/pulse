@@ -10344,16 +10344,6 @@ class _HomeLiveArticleStory extends StatelessWidget {
               Container(
                 width: 48,
                 padding: const EdgeInsets.only(right: 10),
-                decoration: BoxDecoration(
-                  border: Border(
-                    right: BorderSide(
-                      color: index == 0
-                          ? const Color(0xFF2563EB).withValues(alpha: 0.55)
-                          : border,
-                      width: index == 0 ? 2 : 1,
-                    ),
-                  ),
-                ),
                 child: Text(
                   _landingClockLabel(
                     _landingParseTimestamp(
@@ -10363,9 +10353,7 @@ class _HomeLiveArticleStory extends StatelessWidget {
                     ),
                   ),
                   style: TextStyle(
-                      color: index == 0 ? const Color(0xFF2563EB) : muted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700),
+                      color: muted, fontSize: 11, fontWeight: FontWeight.w700),
                 ),
               ),
               Expanded(
