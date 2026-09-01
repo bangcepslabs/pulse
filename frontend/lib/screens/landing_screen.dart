@@ -948,6 +948,20 @@ class _LandingScreenState extends State<LandingScreen>
               editionSnapshot.data,
               newsSnapshot.data ?? const <TrendItem>[],
             );
+            final liveList = Column(
+              children: [
+                ...items.take(5).toList().asMap().entries.map(
+                      (entry) => _HomeLiveArticleStory(
+                        index: entry.key,
+                        item: entry.value,
+                        foreground: foreground,
+                        muted: muted,
+                        border: border,
+                        onTap: () => _openLandingTrendItemArticle(entry.value),
+                      ),
+                    ),
+              ],
+            );
             return Padding(
               padding: EdgeInsets.fromLTRB(
                 isMobile ? 20 : 32,
@@ -1001,18 +1015,20 @@ class _LandingScreenState extends State<LandingScreen>
                       '새롭게 확인된 소식이 없습니다.',
                       style: TextStyle(color: muted, fontSize: 13),
                     )
+                  else if (isMobile)
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: dark ? const Color(0xFF111C30) : Colors.white,
+                        border: Border.all(color: border),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: liveList,
+                      ),
+                    )
                   else
-                    ...items.take(5).toList().asMap().entries.map(
-                          (entry) => _HomeLiveArticleStory(
-                            index: entry.key,
-                            item: entry.value,
-                            foreground: foreground,
-                            muted: muted,
-                            border: border,
-                            onTap: () =>
-                                _openLandingTrendItemArticle(entry.value),
-                          ),
-                        ),
+                    liveList,
                 ],
               ),
             );
