@@ -451,7 +451,7 @@ class _LandingScreenState extends State<LandingScreen>
                     ),
                   ),
                 ),
-                _buildFooter(),
+                if (!isMobile) _buildFooter(),
               ],
             ),
           ),
@@ -573,22 +573,18 @@ class _LandingScreenState extends State<LandingScreen>
           EdgeInsets.fromLTRB(isMobile ? 20 : 32, 16, isMobile ? 20 : 32, 20),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: isMobile
-              ? const Color(0xFF2563EB).withValues(alpha: 0.045)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(isMobile ? 22 : 0),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.zero,
           border: Border.all(
-            color: isMobile
-                ? const Color(0xFF2563EB).withValues(alpha: 0.10)
-                : Colors.transparent,
+            color: Colors.transparent,
           ),
         ),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            isMobile ? 14 : 0,
+            isMobile ? 0 : 0,
             isMobile ? 15 : 0,
-            isMobile ? 14 : 0,
-            isMobile ? 14 : 0,
+            isMobile ? 0 : 0,
+            isMobile ? 0 : 0,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -601,7 +597,7 @@ class _LandingScreenState extends State<LandingScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isMobile ? '오늘의 핵심 이슈' : '오늘의 핵심 뉴스',
+                          '오늘의 핵심 뉴스',
                           style: TextStyle(
                             color: const Color(0xFF2563EB),
                             fontSize: 11,
@@ -610,15 +606,6 @@ class _LandingScreenState extends State<LandingScreen>
                           ),
                         ),
                         const SizedBox(height: 3),
-                        if (isMobile)
-                          Text(
-                            '메인 뉴스',
-                            style: TextStyle(
-                              color: foreground,
-                              fontSize: isMobile ? 22 : 26,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -1023,19 +1010,6 @@ class _LandingScreenState extends State<LandingScreen>
                           '새롭게 확인된 소식이 없습니다.',
                           style: TextStyle(color: muted, fontSize: 13),
                         )
-                      else if (isMobile)
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            color:
-                                dark ? const Color(0xFF111C30) : Colors.white,
-                            border: Border.all(color: border),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: liveList,
-                          ),
-                        )
                       else
                         liveList,
                     ],
@@ -1104,12 +1078,32 @@ class _LandingScreenState extends State<LandingScreen>
               ),
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
-                    isMobile ? 12 : 16, 12, isMobile ? 0 : 16, 12),
+                    isMobile ? 12 : 16, 12, isMobile ? 12 : 16, 12),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final cardWidth = isMobile
                         ? 142.0
                         : (constraints.maxWidth - 30) / targets.length;
+                    if (isMobile) {
+                      return GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: targets.length,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 1.35,
+                        ),
+                        itemBuilder: (context, index) => _HomeMarketValue(
+                          quote: targets[index],
+                          foreground: foreground,
+                          muted: muted,
+                          isMobile: isMobile,
+                        ),
+                      );
+                    }
                     return SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -9976,7 +9970,7 @@ class _HomeStoryCarouselState extends State<_HomeStoryCarousel> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final surface = dark ? const Color(0xFF111C30) : Colors.white;
     final isMobile = MediaQuery.sizeOf(context).width < 768;
-    final height = isMobile ? 190.0 : 226.0;
+    final height = isMobile ? 350.0 : 226.0;
 
     return Column(
       children: [
@@ -10100,31 +10094,32 @@ class _HomeFeaturedStoryState extends State<_HomeFeaturedStory> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isMobile = MediaQuery.sizeOf(context).width < 768;
-    final thumbnailWidth = isMobile ? 112.0 : 320.0;
-    final thumbnailHeight = isMobile ? 102.0 : 180.0;
+    final thumbnailWidth = isMobile ? double.infinity : 320.0;
+    final thumbnailHeight = isMobile ? 0.0 : 180.0;
     final story = widget.story;
     final foreground = widget.foreground;
     final muted = widget.muted;
     final thumbnailUrl = story.thumbnailUrl.trim();
     Widget thumbnail() {
-      return SizedBox(
-        width: thumbnailWidth,
-        height: thumbnailHeight,
-        child: NetworkThumbnail(
-          imageUrl: thumbnailUrl,
-          fit: BoxFit.cover,
-          borderRadius: BorderRadius.circular(10),
-          loadingWidget: DecoratedBox(
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9),
-            ),
+      final image = NetworkThumbnail(
+        imageUrl: thumbnailUrl,
+        fit: BoxFit.cover,
+        borderRadius: BorderRadius.circular(10),
+        loadingWidget: DecoratedBox(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9),
           ),
-          errorWidget: const SizedBox.shrink(),
-          onError: () {
-            if (mounted) setState(() => _thumbnailFailed = true);
-          },
         ),
+        errorWidget: const SizedBox.shrink(),
+        onError: () {
+          if (mounted) setState(() => _thumbnailFailed = true);
+        },
       );
+      if (isMobile) {
+        return AspectRatio(aspectRatio: 16 / 9, child: image);
+      }
+      return SizedBox(
+          width: thumbnailWidth, height: thumbnailHeight, child: image);
     }
 
     return InkWell(
@@ -10136,6 +10131,10 @@ class _HomeFeaturedStoryState extends State<_HomeFeaturedStory> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (isMobile && thumbnailUrl.isNotEmpty && !_thumbnailFailed) ...[
+                thumbnail(),
+                const SizedBox(height: 10),
+              ],
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -10220,12 +10219,6 @@ class _HomeFeaturedStoryState extends State<_HomeFeaturedStory> {
                         ],
                       ),
                     ),
-                    if (isMobile &&
-                        thumbnailUrl.isNotEmpty &&
-                        !_thumbnailFailed) ...[
-                      const SizedBox(width: 12),
-                      thumbnail(),
-                    ],
                   ],
                 ),
               ),
@@ -10321,7 +10314,6 @@ class _HomeLiveArticleStory extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = item.koreanTitle;
     final summary = item.summaryKr.trim();
-    final isMobile = MediaQuery.sizeOf(context).width < 768;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: Duration(milliseconds: 180 + (index * 35)),
@@ -10338,11 +10330,6 @@ class _HomeLiveArticleStory extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: index == 0 && isMobile
-                ? const Color(0xFF2563EB).withValues(alpha: 0.035)
-                : Colors.transparent,
-            borderRadius:
-                BorderRadius.circular(index == 0 && isMobile ? 10 : 0),
             border: Border(bottom: BorderSide(color: border)),
           ),
           child: Row(
