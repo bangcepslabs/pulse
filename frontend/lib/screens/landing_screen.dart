@@ -9970,7 +9970,7 @@ class _HomeStoryCarouselState extends State<_HomeStoryCarousel> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final surface = dark ? const Color(0xFF111C30) : Colors.white;
     final isMobile = MediaQuery.sizeOf(context).width < 768;
-    final height = isMobile ? 350.0 : 226.0;
+    final height = isMobile ? 390.0 : 226.0;
 
     return Column(
       children: [
