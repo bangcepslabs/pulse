@@ -10321,75 +10321,89 @@ class _HomeLiveArticleStory extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = item.koreanTitle;
     final summary = item.summaryKr.trim();
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration:
-            BoxDecoration(border: Border(bottom: BorderSide(color: border))),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 48,
-              padding: const EdgeInsets.only(right: 10),
-              decoration: BoxDecoration(
-                border: Border(
-                  right: BorderSide(
-                    color: index == 0
-                        ? const Color(0xFF2563EB).withValues(alpha: 0.55)
-                        : border,
-                    width: index == 0 ? 2 : 1,
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 180 + (index * 35)),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, 5 * (1 - value)),
+          child: child,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration:
+              BoxDecoration(border: Border(bottom: BorderSide(color: border))),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                padding: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(
+                  border: Border(
+                    right: BorderSide(
+                      color: index == 0
+                          ? const Color(0xFF2563EB).withValues(alpha: 0.55)
+                          : border,
+                      width: index == 0 ? 2 : 1,
+                    ),
                   ),
                 ),
-              ),
-              child: Text(
-                _landingClockLabel(
-                  _landingParseTimestamp(
-                    item.published.isNotEmpty ? item.published : item.createdAt,
+                child: Text(
+                  _landingClockLabel(
+                    _landingParseTimestamp(
+                      item.published.isNotEmpty
+                          ? item.published
+                          : item.createdAt,
+                    ),
                   ),
+                  style: TextStyle(
+                      color: index == 0 ? const Color(0xFF2563EB) : muted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700),
                 ),
-                style: TextStyle(
-                    color: index == 0 ? const Color(0xFF2563EB) : muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700),
               ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.category.isEmpty ? '뉴스' : item.category,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Color(0xFF2563EB),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(title,
-                      maxLines: 2,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.category.isEmpty ? '뉴스' : item.category,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: foreground,
-                          fontSize: 14,
-                          height: 1.32,
-                          fontWeight: FontWeight.w700)),
-                  if (summary.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(summary,
-                        maxLines: 1,
+                      style: const TextStyle(
+                          color: Color(0xFF2563EB),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(title,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: muted, fontSize: 11)),
+                        style: TextStyle(
+                            color: foreground,
+                            fontSize: 14,
+                            height: 1.32,
+                            fontWeight: FontWeight.w700)),
+                    if (summary.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(summary,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: muted, fontSize: 11)),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Icon(Icons.chevron_right_rounded, color: muted, size: 16),
-          ],
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded, color: muted, size: 16),
+            ],
+          ),
         ),
       ),
     );
