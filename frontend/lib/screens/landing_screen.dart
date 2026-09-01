@@ -952,7 +952,7 @@ class _LandingScreenState extends State<LandingScreen>
               padding: EdgeInsets.fromLTRB(
                 isMobile ? 20 : 32,
                 0,
-                isMobile ? 20 : 32,
+                isMobile ? 20 : 160,
                 28,
               ),
               child: Column(
@@ -9991,33 +9991,38 @@ class _HomeStoryCarouselState extends State<_HomeStoryCarousel> {
           ),
         ),
         const SizedBox(height: 4),
-        Row(
-          children: [
-            Wrap(
-              spacing: 5,
-              children: List.generate(widget.stories.length, (index) {
-                final active = index == _currentIndex;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: active ? 16 : 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: active ? const Color(0xFF2563EB) : widget.border,
-                    borderRadius: BorderRadius.circular(999),
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 980),
+            child: Row(
+              children: [
+                Wrap(
+                  spacing: 5,
+                  children: List.generate(widget.stories.length, (index) {
+                    final active = index == _currentIndex;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: active ? 16 : 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: active ? const Color(0xFF2563EB) : widget.border,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    );
+                  }),
+                ),
+                const Spacer(),
+                Text(
+                  '${_currentIndex + 1} / ${widget.stories.length}',
+                  style: TextStyle(
+                    color: widget.muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
                   ),
-                );
-              }),
+                ),
+              ],
             ),
-            const Spacer(),
-            Text(
-              '${_currentIndex + 1} / ${widget.stories.length}',
-              style: TextStyle(
-                color: widget.muted,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
