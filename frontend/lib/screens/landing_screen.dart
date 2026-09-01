@@ -573,18 +573,22 @@ class _LandingScreenState extends State<LandingScreen>
           EdgeInsets.fromLTRB(isMobile ? 20 : 32, 16, isMobile ? 20 : 32, 20),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFF2563EB).withValues(alpha: 0.045),
-          borderRadius: BorderRadius.circular(22),
+          color: isMobile
+              ? const Color(0xFF2563EB).withValues(alpha: 0.045)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(isMobile ? 22 : 0),
           border: Border.all(
-            color: const Color(0xFF2563EB).withValues(alpha: 0.10),
+            color: isMobile
+                ? const Color(0xFF2563EB).withValues(alpha: 0.10)
+                : Colors.transparent,
           ),
         ),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            isMobile ? 14 : 18,
-            isMobile ? 15 : 18,
-            isMobile ? 14 : 18,
-            isMobile ? 14 : 18,
+            isMobile ? 14 : 0,
+            isMobile ? 15 : 0,
+            isMobile ? 14 : 0,
+            isMobile ? 14 : 0,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -597,7 +601,7 @@ class _LandingScreenState extends State<LandingScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '오늘의 핵심 이슈',
+                          isMobile ? '오늘의 핵심 이슈' : '오늘의 핵심 뉴스',
                           style: TextStyle(
                             color: const Color(0xFF2563EB),
                             fontSize: 11,
@@ -606,14 +610,15 @@ class _LandingScreenState extends State<LandingScreen>
                           ),
                         ),
                         const SizedBox(height: 3),
-                        Text(
-                          '메인 뉴스',
-                          style: TextStyle(
-                            color: foreground,
-                            fontSize: isMobile ? 22 : 26,
-                            fontWeight: FontWeight.w700,
+                        if (isMobile)
+                          Text(
+                            '메인 뉴스',
+                            style: TextStyle(
+                              color: foreground,
+                              fontSize: isMobile ? 22 : 26,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -981,29 +986,7 @@ class _LandingScreenState extends State<LandingScreen>
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF2563EB),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '방금 업데이트된 뉴스',
-                        style: TextStyle(
-                          color: muted,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 8),
                   if (editionSnapshot.connectionState ==
                           ConnectionState.waiting ||
                       newsSnapshot.connectionState == ConnectionState.waiting)
@@ -1084,9 +1067,13 @@ class _LandingScreenState extends State<LandingScreen>
           else
             DecoratedBox(
               decoration: BoxDecoration(
-                color: dark ? const Color(0xFF111C30) : Colors.white,
-                border: Border.all(color: border),
-                borderRadius: BorderRadius.circular(20),
+                color: dark
+                    ? (isMobile ? const Color(0xFF111C30) : Colors.transparent)
+                    : (isMobile ? Colors.white : Colors.transparent),
+                border: Border.all(
+                  color: isMobile ? border : Colors.transparent,
+                ),
+                borderRadius: BorderRadius.circular(isMobile ? 20 : 0),
               ),
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
@@ -4338,6 +4325,7 @@ class _LandingScreenState extends State<LandingScreen>
 
   Widget _buildFooter() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDesktop = MediaQuery.sizeOf(context).width >= 768;
     final topBorder = isDark ? Colors.grey.shade800 : Colors.grey[200]!;
     return Container(
       decoration: BoxDecoration(
@@ -4347,39 +4335,70 @@ class _LandingScreenState extends State<LandingScreen>
           constraints: const BoxConstraints(maxWidth: PulseUi.maxContentWidth),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Column(
-              children: [
-                const _LandingFooterBrandBlock(),
-                const SizedBox(height: 6),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    TextButton(
-                      onPressed: () => _openPage(const HomeScreen()),
-                      child: const Text('실시간 뉴스'),
-                    ),
-                    TextButton(
-                      onPressed: () => _openPage(const MarketPage()),
-                      child: const Text('증시'),
-                    ),
-                    TextButton(
-                      onPressed: () => _openPage(const ContactPage()),
-                      child: const Text('개인정보처리방침'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '© 2026 Pulse',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade500,
+            child: isDesktop
+                ? Row(
+                    children: [
+                      const _LandingFooterBrandBlock(),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => _openPage(const HomeScreen()),
+                        child: const Text('실시간 뉴스'),
+                      ),
+                      TextButton(
+                        onPressed: () => _openPage(const MarketPage()),
+                        child: const Text('증시'),
+                      ),
+                      TextButton(
+                        onPressed: () => _openPage(const ContactPage()),
+                        child: const Text('개인정보처리방침'),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '© 2026 Pulse',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      const _LandingFooterBrandBlock(),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          TextButton(
+                            onPressed: () => _openPage(const HomeScreen()),
+                            child: const Text('실시간 뉴스'),
+                          ),
+                          TextButton(
+                            onPressed: () => _openPage(const MarketPage()),
+                            child: const Text('증시'),
+                          ),
+                          TextButton(
+                            onPressed: () => _openPage(const ContactPage()),
+                            child: const Text('개인정보처리방침'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '© 2026 Pulse',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
@@ -10138,6 +10157,34 @@ class _HomeFeaturedStoryState extends State<_HomeFeaturedStory> {
                                   color: muted, fontSize: 12.5, height: 1.4),
                             ),
                           ],
+                          const Spacer(),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  story.meta.trim(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: muted, fontSize: 11),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                story.actionLabel,
+                                style: const TextStyle(
+                                  color: Color(0xFF2563EB),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              const Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 14,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -10149,28 +10196,6 @@ class _HomeFeaturedStoryState extends State<_HomeFeaturedStory> {
                     ],
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      story.meta.trim(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: muted, fontSize: 11),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(story.actionLabel,
-                      style: const TextStyle(
-                          color: Color(0xFF2563EB),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700)),
-                  const SizedBox(width: 3),
-                  const Icon(Icons.arrow_forward_rounded,
-                      size: 14, color: Color(0xFF2563EB)),
-                ],
               ),
             ],
           ),
