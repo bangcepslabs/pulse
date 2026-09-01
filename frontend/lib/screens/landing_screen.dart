@@ -10321,6 +10321,7 @@ class _HomeLiveArticleStory extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = item.koreanTitle;
     final summary = item.summaryKr.trim();
+    final isMobile = MediaQuery.sizeOf(context).width < 768;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: Duration(milliseconds: 180 + (index * 35)),
@@ -10336,8 +10337,14 @@ class _HomeLiveArticleStory extends StatelessWidget {
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration:
-              BoxDecoration(border: Border(bottom: BorderSide(color: border))),
+          decoration: BoxDecoration(
+            color: index == 0 && isMobile
+                ? const Color(0xFF2563EB).withValues(alpha: 0.035)
+                : Colors.transparent,
+            borderRadius:
+                BorderRadius.circular(index == 0 && isMobile ? 10 : 0),
+            border: Border(bottom: BorderSide(color: border)),
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
