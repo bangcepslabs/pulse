@@ -966,70 +966,81 @@ class _LandingScreenState extends State<LandingScreen>
               padding: EdgeInsets.fromLTRB(
                 isMobile ? 20 : 32,
                 0,
-                isMobile ? 20 : 160,
+                isMobile ? 20 : 32,
                 28,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: isMobile ? double.infinity : 960,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          '실시간 흐름',
-                          style: TextStyle(
-                            color: foreground,
-                            fontSize: isMobile ? 21 : 24,
-                            fontWeight: FontWeight.w700,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '실시간 흐름',
+                              style: TextStyle(
+                                color: foreground,
+                                fontSize: isMobile ? 21 : 24,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => _openPage(const HomeScreen()),
-                        icon: const Text('전체보기'),
-                        label:
-                            const Icon(Icons.arrow_forward_rounded, size: 14),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          visualDensity: VisualDensity.compact,
-                          textStyle: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                          TextButton.icon(
+                            onPressed: () => _openPage(const HomeScreen()),
+                            icon: const Text('전체보기'),
+                            label: const Icon(Icons.arrow_forward_rounded,
+                                size: 14),
+                            style: TextButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              visualDensity: VisualDensity.compact,
+                              textStyle: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
+                      const SizedBox(height: 8),
+                      if (editionSnapshot.connectionState ==
+                              ConnectionState.waiting ||
+                          newsSnapshot.connectionState ==
+                              ConnectionState.waiting)
+                        const _HomeLoadingLine()
+                      else if (editionSnapshot.hasError ||
+                          newsSnapshot.hasError)
+                        Text(
+                          '새롭게 확인된 소식을 불러오지 못했습니다.',
+                          style: TextStyle(color: muted, fontSize: 13),
+                        )
+                      else if (items.isEmpty)
+                        Text(
+                          '새롭게 확인된 소식이 없습니다.',
+                          style: TextStyle(color: muted, fontSize: 13),
+                        )
+                      else if (isMobile)
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color:
+                                dark ? const Color(0xFF111C30) : Colors.white,
+                            border: Border.all(color: border),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: liveList,
+                          ),
+                        )
+                      else
+                        liveList,
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  if (editionSnapshot.connectionState ==
-                          ConnectionState.waiting ||
-                      newsSnapshot.connectionState == ConnectionState.waiting)
-                    const _HomeLoadingLine()
-                  else if (editionSnapshot.hasError || newsSnapshot.hasError)
-                    Text(
-                      '새롭게 확인된 소식을 불러오지 못했습니다.',
-                      style: TextStyle(color: muted, fontSize: 13),
-                    )
-                  else if (items.isEmpty)
-                    Text(
-                      '새롭게 확인된 소식이 없습니다.',
-                      style: TextStyle(color: muted, fontSize: 13),
-                    )
-                  else if (isMobile)
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: dark ? const Color(0xFF111C30) : Colors.white,
-                        border: Border.all(color: border),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: liveList,
-                      ),
-                    )
-                  else
-                    liveList,
-                ],
+                ),
               ),
             );
           },
