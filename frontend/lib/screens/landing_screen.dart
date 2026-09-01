@@ -1101,6 +1101,7 @@ class _LandingScreenState extends State<LandingScreen>
                               right: index == targets.length - 1 ? 0 : 10),
                           child: SizedBox(
                             width: isMobile ? 142 : 158,
+                            height: isMobile ? 104 : 112,
                             child: _HomeMarketValue(
                               quote: targets[index],
                               foreground: foreground,
