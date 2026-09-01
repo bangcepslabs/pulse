@@ -10048,6 +10048,27 @@ class _HomeFeaturedStoryState extends State<_HomeFeaturedStory> {
     final foreground = widget.foreground;
     final muted = widget.muted;
     final thumbnailUrl = story.thumbnailUrl.trim();
+    Widget thumbnail() {
+      return SizedBox(
+        width: thumbnailWidth,
+        height: thumbnailHeight,
+        child: NetworkThumbnail(
+          imageUrl: thumbnailUrl,
+          fit: BoxFit.cover,
+          borderRadius: BorderRadius.circular(10),
+          loadingWidget: DecoratedBox(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9),
+            ),
+          ),
+          errorWidget: const SizedBox.shrink(),
+          onError: () {
+            if (mounted) setState(() => _thumbnailFailed = true);
+          },
+        ),
+      );
+    }
+
     return InkWell(
       onTap: widget.onTap,
       borderRadius: BorderRadius.circular(12),
@@ -10061,6 +10082,12 @@ class _HomeFeaturedStoryState extends State<_HomeFeaturedStory> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    if (!isMobile &&
+                        thumbnailUrl.isNotEmpty &&
+                        !_thumbnailFailed) ...[
+                      thumbnail(),
+                      const SizedBox(width: 18),
+                    ],
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -10107,27 +10134,11 @@ class _HomeFeaturedStoryState extends State<_HomeFeaturedStory> {
                         ],
                       ),
                     ),
-                    if (thumbnailUrl.isNotEmpty && !_thumbnailFailed) ...[
+                    if (isMobile &&
+                        thumbnailUrl.isNotEmpty &&
+                        !_thumbnailFailed) ...[
                       const SizedBox(width: 12),
-                      SizedBox(
-                        width: thumbnailWidth,
-                        height: thumbnailHeight,
-                        child: NetworkThumbnail(
-                          imageUrl: thumbnailUrl,
-                          fit: BoxFit.cover,
-                          borderRadius: BorderRadius.circular(10),
-                          loadingWidget: DecoratedBox(
-                              decoration: BoxDecoration(
-                                  color: isDark
-                                      ? const Color(0xFF1F2937)
-                                      : const Color(0xFFF1F5F9))),
-                          errorWidget: const SizedBox.shrink(),
-                          onError: () {
-                            if (mounted)
-                              setState(() => _thumbnailFailed = true);
-                          },
-                        ),
-                      ),
+                      thumbnail(),
                     ],
                   ],
                 ),
