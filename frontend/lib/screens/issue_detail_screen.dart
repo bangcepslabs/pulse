@@ -21,6 +21,7 @@ class IssueDetailScreen extends StatelessWidget {
     final foreground = isDark ? Colors.white : const Color(0xFF0F172A);
     final muted = isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B);
     final border = isDark ? const Color(0xFF243247) : const Color(0xFFE2E8F0);
+    final isDesktop = MediaQuery.sizeOf(context).width >= 768;
     final title = _issueDisplayTitle(issue);
     final summary = _usableSummary(issue.summary, title);
     final keyPoints = issue.timeline.where((item) => item.isUsable).toList();
@@ -31,104 +32,131 @@ class IssueDetailScreen extends StatelessWidget {
         child: FutureBuilder<List<TrendItem>>(
           future: articlesFuture,
           builder: (context, snapshot) {
-            final articles = _sortedArticles(snapshot.data ?? const <TrendItem>[]);
+            final articles =
+                _sortedArticles(snapshot.data ?? const <TrendItem>[]);
             return CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          tooltip: '뒤로 가기',
-                          onPressed: () => Navigator.of(context).maybePop(),
-                          icon: Icon(Icons.arrow_back_rounded, color: foreground),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1180),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              tooltip: '뒤로 가기',
+                              onPressed: () => Navigator.of(context).maybePop(),
+                              icon: Icon(Icons.arrow_back_rounded,
+                                  color: foreground),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _IssueDetailMeta(
-                          category: issue.category,
-                          time: _issueDetailTimeLabel(issue.lastSeenAt),
-                          muted: muted,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 920),
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          isDesktop ? 0 : 20,
+                          isDesktop ? 18 : 8,
+                          isDesktop ? 0 : 20,
+                          0,
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          title.isEmpty ? '주요 이슈' : title,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: foreground,
-                            fontSize: 24,
-                            height: 1.28,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (imageUrl.isNotEmpty) ...[
-                          const SizedBox(height: 18),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: AspectRatio(
-                              aspectRatio: 16 / 9,
-                              child: NetworkThumbnail(
-                                imageUrl: imageUrl,
-                                fit: BoxFit.cover,
-                                loadingWidget: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9),
-                                  ),
-                                ),
-                                errorWidget: const SizedBox.shrink(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _IssueDetailMeta(
+                              category: issue.category,
+                              time: _issueDetailTimeLabel(issue.lastSeenAt),
+                              muted: muted,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              title.isEmpty ? '주요 이슈' : title,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: foreground,
+                                fontSize: isDesktop ? 34 : 24,
+                                height: isDesktop ? 1.18 : 1.28,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
-                          ),
-                        ],
-                        if (summary != null) ...[
-                          const SizedBox(height: 24),
-                          _IssueDetailHeading(title: '무슨 일이 있었나', color: foreground),
-                          const SizedBox(height: 10),
-                          Text(
-                            summary,
-                            style: TextStyle(color: foreground, fontSize: 15, height: 1.65),
-                          ),
-                        ],
-                        if (keyPoints.isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          Divider(color: border, height: 1),
-                          const SizedBox(height: 22),
-                          _IssueDetailHeading(title: '이슈 흐름', color: foreground),
-                          const SizedBox(height: 12),
-                          ...keyPoints.map(
-                            (event) => _IssueDetailTimelineRow(
-                              event: event,
-                              muted: muted,
-                              foreground: foreground,
+                            if (imageUrl.isNotEmpty) ...[
+                              const SizedBox(height: 18),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: AspectRatio(
+                                  aspectRatio: 16 / 9,
+                                  child: NetworkThumbnail(
+                                    imageUrl: imageUrl,
+                                    fit: BoxFit.cover,
+                                    loadingWidget: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? const Color(0xFF1F2937)
+                                            : const Color(0xFFF1F5F9),
+                                      ),
+                                    ),
+                                    errorWidget: const SizedBox.shrink(),
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (summary != null) ...[
+                              const SizedBox(height: 24),
+                              _IssueDetailHeading(
+                                  title: '무슨 일이 있었나', color: foreground),
+                              const SizedBox(height: 10),
+                              Text(
+                                summary,
+                                style: TextStyle(
+                                  color: foreground,
+                                  fontSize: isDesktop ? 16 : 15,
+                                  height: 1.65,
+                                ),
+                              ),
+                            ],
+                            if (keyPoints.isNotEmpty) ...[
+                              const SizedBox(height: 24),
+                              Divider(color: border, height: 1),
+                              const SizedBox(height: 22),
+                              _IssueDetailHeading(
+                                  title: '이슈 흐름', color: foreground),
+                              const SizedBox(height: 12),
+                              ...keyPoints.map(
+                                (event) => _IssueDetailTimelineRow(
+                                  event: event,
+                                  muted: muted,
+                                  foreground: foreground,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 26),
+                            Divider(color: border, height: 1),
+                            const SizedBox(height: 20),
+                            _IssueDetailHeading(
+                              title:
+                                  '관련 기사${snapshot.connectionState == ConnectionState.done ? ' ${articles.length}' : ''}',
+                              color: foreground,
                             ),
-                          ),
-                        ],
-                        const SizedBox(height: 26),
-                        Divider(color: border, height: 1),
-                        const SizedBox(height: 20),
-                        _IssueDetailHeading(
-                          title: '관련 기사${snapshot.connectionState == ConnectionState.done ? ' ${articles.length}' : ''}',
-                          color: foreground,
+                            const SizedBox(height: 6),
+                          ],
                         ),
-                        const SizedBox(height: 6),
-                      ],
+                      ),
                     ),
                   ),
                 ),
                 if (snapshot.connectionState == ConnectionState.waiting)
                   const SliverFillRemaining(
                     hasScrollBody: false,
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                    child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2)),
                   )
                 else if (snapshot.hasError)
                   SliverFillRemaining(
@@ -148,10 +176,16 @@ class IssueDetailScreen extends StatelessWidget {
                   )
                 else
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+                    padding: EdgeInsets.fromLTRB(
+                      isDesktop ? 0 : 20,
+                      0,
+                      isDesktop ? 0 : 20,
+                      28,
+                    ),
                     sliver: SliverList.separated(
                       itemCount: articles.length,
-                      separatorBuilder: (_, __) => Divider(color: border, height: 1),
+                      separatorBuilder: (_, __) =>
+                          Divider(color: border, height: 1),
                       itemBuilder: (context, index) => _IssueDetailArticleRow(
                         item: articles[index],
                         foreground: foreground,
@@ -173,7 +207,8 @@ class _IssueDetailMeta extends StatelessWidget {
   final String time;
   final Color muted;
 
-  const _IssueDetailMeta({required this.category, required this.time, required this.muted});
+  const _IssueDetailMeta(
+      {required this.category, required this.time, required this.muted});
 
   @override
   Widget build(BuildContext context) {
@@ -181,10 +216,16 @@ class _IssueDetailMeta extends StatelessWidget {
       children: [
         Text(
           category.trim().isEmpty ? '뉴스' : category.trim(),
-          style: const TextStyle(color: Color(0xFF2563EB), fontSize: 13, fontWeight: FontWeight.w700),
+          style: const TextStyle(
+              color: Color(0xFF2563EB),
+              fontSize: 13,
+              fontWeight: FontWeight.w700),
         ),
         const SizedBox(width: 7),
-        Container(width: 3, height: 3, decoration: BoxDecoration(color: muted, shape: BoxShape.circle)),
+        Container(
+            width: 3,
+            height: 3,
+            decoration: BoxDecoration(color: muted, shape: BoxShape.circle)),
         const SizedBox(width: 7),
         Text(time, style: TextStyle(color: muted, fontSize: 12)),
       ],
@@ -201,7 +242,8 @@ class _IssueDetailHeading extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         title,
-        style: TextStyle(color: color, fontSize: 17, fontWeight: FontWeight.w700),
+        style:
+            TextStyle(color: color, fontSize: 17, fontWeight: FontWeight.w700),
       );
 }
 
@@ -227,7 +269,8 @@ class _IssueDetailTimelineRow extends StatelessWidget {
             width: 52,
             child: Text(
               _issueTimelineClockLabel(event.occurredAt),
-              style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  color: muted, fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
           Expanded(
@@ -247,7 +290,8 @@ class _IssueDetailArticleRow extends StatelessWidget {
   final Color foreground;
   final Color muted;
 
-  const _IssueDetailArticleRow({required this.item, required this.foreground, required this.muted});
+  const _IssueDetailArticleRow(
+      {required this.item, required this.foreground, required this.muted});
 
   @override
   Widget build(BuildContext context) {
@@ -270,11 +314,18 @@ class _IssueDetailArticleRow extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(source, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600)),
+                        child: Text(source,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: muted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
                       ),
                       if (time != null) ...[
                         const SizedBox(width: 10),
-                        Text(time, style: TextStyle(color: muted, fontSize: 12)),
+                        Text(time,
+                            style: TextStyle(color: muted, fontSize: 12)),
                       ],
                     ],
                   ),
@@ -283,7 +334,11 @@ class _IssueDetailArticleRow extends StatelessWidget {
                     item.koreanTitle,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: foreground, fontSize: 15, height: 1.35, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                        color: foreground,
+                        fontSize: 15,
+                        height: 1.35,
+                        fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -307,14 +362,17 @@ class _IssueDetailMessage extends StatelessWidget {
   const _IssueDetailMessage({required this.message, required this.color});
 
   @override
-  Widget build(BuildContext context) => Center(child: Text(message, style: TextStyle(color: color, fontSize: 13)));
+  Widget build(BuildContext context) => Center(
+      child: Text(message, style: TextStyle(color: color, fontSize: 13)));
 }
 
 List<TrendItem> _sortedArticles(List<TrendItem> articles) {
   final sorted = [...articles];
   sorted.sort((left, right) {
-    final leftTime = _parseIssueDetailTime(left.published.isNotEmpty ? left.published : left.createdAt);
-    final rightTime = _parseIssueDetailTime(right.published.isNotEmpty ? right.published : right.createdAt);
+    final leftTime = _parseIssueDetailTime(
+        left.published.isNotEmpty ? left.published : left.createdAt);
+    final rightTime = _parseIssueDetailTime(
+        right.published.isNotEmpty ? right.published : right.createdAt);
     return (rightTime ?? DateTime(1970)).compareTo(leftTime ?? DateTime(1970));
   });
   return sorted;
@@ -322,9 +380,13 @@ List<TrendItem> _sortedArticles(List<TrendItem> articles) {
 
 String? _usableSummary(String summary, String title) {
   final value = summary.trim();
-  final normalizedSummary = value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9가-힣]'), '');
-  final normalizedTitle = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9가-힣]'), '');
-  if (normalizedSummary.length < 16 || normalizedSummary == normalizedTitle || normalizedTitle.contains(normalizedSummary)) return null;
+  final normalizedSummary =
+      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9가-힣]'), '');
+  final normalizedTitle =
+      title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9가-힣]'), '');
+  if (normalizedSummary.length < 16 ||
+      normalizedSummary == normalizedTitle ||
+      normalizedTitle.contains(normalizedSummary)) return null;
   return value;
 }
 
@@ -350,8 +412,10 @@ String _issueDetailTimeLabel(String value) {
   final date = _parseIssueDetailTime(value);
   if (date == null) return '최근 업데이트';
   final difference = DateTime.now().difference(date);
-  if (!difference.isNegative && difference.inMinutes < 60) return '${difference.inMinutes == 0 ? 1 : difference.inMinutes}분 전';
-  if (!difference.isNegative && difference.inHours < 24) return '${difference.inHours}시간 전';
+  if (!difference.isNegative && difference.inMinutes < 60)
+    return '${difference.inMinutes == 0 ? 1 : difference.inMinutes}분 전';
+  if (!difference.isNegative && difference.inHours < 24)
+    return '${difference.inHours}시간 전';
   return '${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
 }
 
@@ -380,6 +444,7 @@ Future<void> _openIssueArticle(BuildContext context, String link) async {
   if (uri == null) return;
   final opened = await launchUrl(uri, webOnlyWindowName: '_blank');
   if (!opened && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('기사 원문을 열 수 없습니다.')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('기사 원문을 열 수 없습니다.')));
   }
 }
