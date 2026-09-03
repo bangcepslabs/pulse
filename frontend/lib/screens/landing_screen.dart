@@ -959,7 +959,11 @@ class _LandingScreenState extends State<LandingScreen>
               child: Center(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxWidth: isMobile ? double.infinity : 960,
+                    // The desktop live feed shares the same content rail as
+                    // the hero and market sections. Keep the mobile branch
+                    // unchanged while allowing the desktop rail to use the
+                    // full width supplied by the 1180px page container.
+                    maxWidth: double.infinity,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
