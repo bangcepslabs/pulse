@@ -10466,9 +10466,10 @@ class _HomeMarketValue extends StatelessWidget {
           SizedBox(
             height: 22,
             child: Stack(
-              alignment: Alignment.center,
+              alignment: Alignment.centerLeft,
               children: [
-                Center(
+                Align(
+                  alignment: Alignment.centerLeft,
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 280),
                     switchInCurve: Curves.easeOutCubic,
