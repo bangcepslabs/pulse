@@ -10463,44 +10463,52 @@ class _HomeMarketValue extends StatelessWidget {
                 fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 280),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeIn,
-                  transitionBuilder: (child, animation) => FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, .12),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: child,
+          SizedBox(
+            height: 22,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Center(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 280),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeIn,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, .12),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    ),
+                    child: Text(
+                      _landingMarketPriceLabel(quote),
+                      key: ValueKey(_landingMarketPriceLabel(quote)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: foreground,
+                          fontSize: isMobile ? 14 : 15,
+                          fontWeight: FontWeight.w700),
                     ),
                   ),
+                ),
+                Positioned(
+                  right: 0,
                   child: Text(
-                    _landingMarketPriceLabel(quote),
-                    key: ValueKey(_landingMarketPriceLabel(quote)),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    _landingFormatPercent(quote.percentChange),
+                    textAlign: TextAlign.right,
                     style: TextStyle(
-                        color: foreground,
-                        fontSize: isMobile ? 14 : 15,
+                        color: changeColor,
+                        fontSize: 10.5,
                         fontWeight: FontWeight.w700),
                   ),
                 ),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                _landingFormatPercent(quote.percentChange),
-                style: TextStyle(
-                    color: changeColor,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           Expanded(
