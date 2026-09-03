@@ -1568,8 +1568,7 @@ class _HomeScreenState extends State<HomeScreen>
                           refreshNotifier: _refreshNotifier,
                           headerBuilder: cat['value'] == ''
                               ? () => [
-                                    _buildTrendInsightSection(),
-                                    _buildFeaturedNewsSection(),
+                                    _buildNewsSearchHeader(),
                                     _buildAllNewsHeader(),
                                   ]
                               : null,
