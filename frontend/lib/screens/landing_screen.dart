@@ -1023,6 +1023,16 @@ class _LandingScreenState extends State<LandingScreen>
     );
   }
 
+  String _homeMarketStateLabel(List<_LandingMarketQuote> quotes) {
+    if (quotes.isEmpty) return '';
+    final average =
+        quotes.map((quote) => quote.percentChange).reduce((a, b) => a + b) /
+            quotes.length;
+    if (average >= 0.35) return '주요 지표가 전반적으로 상승 중입니다.';
+    if (average <= -0.35) return '주요 지표가 전반적으로 하락 중입니다.';
+    return '주요 지표가 혼조세를 보이고 있습니다.';
+  }
+
   Widget _buildHomeMarketSummary(bool isMobile) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final foreground = dark ? Colors.white : const Color(0xFF0F172A);
@@ -1032,6 +1042,7 @@ class _LandingScreenState extends State<LandingScreen>
         .map((title) => _landingQuoteByTitle(_marketQuotes, title))
         .whereType<_LandingMarketQuote>()
         .toList();
+    final marketState = _homeMarketStateLabel(targets);
 
     return Padding(
       padding:
@@ -1057,6 +1068,17 @@ class _LandingScreenState extends State<LandingScreen>
             style: TextStyle(color: muted, fontSize: 11),
           ),
           const SizedBox(height: 8),
+          if (marketState.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              marketState,
+              style: TextStyle(
+                color: foreground,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
           if (_marketRefreshing && targets.isEmpty)
             const _HomeLoadingLine()
           else if (_marketError != null && targets.isEmpty)
