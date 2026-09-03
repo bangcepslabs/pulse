@@ -28,6 +28,29 @@ class IssueDetailScreen extends StatelessWidget {
     final imageUrl = issue.thumbnailUrl.trim();
 
     return Scaffold(
+      backgroundColor:
+          isDark ? const Color(0xFF0B1220) : const Color(0xFFF5F7FB),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        titleSpacing: 20,
+        title: Text(
+          '이슈 상세',
+          style: TextStyle(
+            color: foreground,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        backgroundColor:
+            isDark ? const Color(0xFF0B1220) : const Color(0xFFF5F7FB),
+        foregroundColor: foreground,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: border, height: 1),
+        ),
+      ),
       body: SafeArea(
         child: FutureBuilder<List<TrendItem>>(
           future: articlesFuture,
@@ -36,26 +59,28 @@ class IssueDetailScreen extends StatelessWidget {
                 _sortedArticles(snapshot.data ?? const <TrendItem>[]);
             return CustomScrollView(
               slivers: [
-                SliverToBoxAdapter(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1180),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              tooltip: '뒤로 가기',
-                              onPressed: () => Navigator.of(context).maybePop(),
-                              icon: Icon(Icons.arrow_back_rounded,
-                                  color: foreground),
-                            ),
-                          ],
+                if (MediaQuery.sizeOf(context).width < 0)
+                  SliverToBoxAdapter(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1180),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                tooltip: '뒤로 가기',
+                                onPressed: () =>
+                                    Navigator.of(context).maybePop(),
+                                icon: Icon(Icons.arrow_back_rounded,
+                                    color: foreground),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
                 SliverToBoxAdapter(
                   child: Center(
                     child: ConstrainedBox(
