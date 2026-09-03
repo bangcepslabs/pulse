@@ -40,6 +40,7 @@ const ISSUE_TIMELINE_WINDOWS = [
 ];
 
 const VALID_CATEGORIES = ['경제', '세계', '사회', '정치', '생활/문화', 'IT/과학'];
+const ANALYSIS_SLOT_MS = AI_ANALYSIS_INTERVAL_MINUTES * 60 * 1000;
 const MARKET_DATA_CACHE_TTL_MS = 45 * 1000;
 const SUPABASE_GET_CACHE_TTL_MS = 45 * 1000;
 const MARKET_DATA_CACHE = new Map();
@@ -1220,7 +1221,12 @@ async function processPendingCandidate(env) {
   const ranked = (candidates || [])
     .map(candidate => ({ candidate, priority: candidatePriority(candidate) }))
     .sort((left, right) => right.priority - left.priority || left.candidate.created_at.localeCompare(right.candidate.created_at));
-  const selected = ranked.slice(0, MAX_AI_ANALYSIS_PER_CYCLE).map(item => item.candidate);
+  const preferredCategory = preferredAnalysisCategory();
+  const preferred = ranked.find(({ candidate }) =>
+    String(candidate.category || '').trim() === preferredCategory,
+  );
+  const selected = (preferred ? [preferred] : ranked.slice(0, MAX_AI_ANALYSIS_PER_CYCLE))
+    .map(item => item.candidate);
 
   if (!selected.length) {
     return { ran: true, totalAnalyzed: 0, totalInserted: 0, pendingRemaining: 0 };
@@ -1271,6 +1277,11 @@ async function processPendingCandidate(env) {
     console.error(`Analysis failed for candidate #${candidate.id}: ${errorMessage}`);
     return { ran: true, totalAnalyzed: 0, totalInserted: 0, failed: 1, rateLimited: isRateLimited, attempts };
   }
+}
+
+function preferredAnalysisCategory(now = Date.now()) {
+  const slot = Math.floor(now / ANALYSIS_SLOT_MS);
+  return VALID_CATEGORIES[slot % VALID_CATEGORIES.length];
 }
 
 function candidatePriority(candidate) {
