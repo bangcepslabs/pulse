@@ -3401,6 +3401,7 @@ class _TrendListState extends State<_TrendList>
             key: ValueKey(trend.id),
             rank: trendIndex + 1,
             trend: trend,
+            isLatest: trendIndex < 2,
             onTapOverride: null,
           );
         },
@@ -3655,12 +3656,14 @@ class _TrendCardState extends State<_TrendCard>
 class _NewsListRow extends StatefulWidget {
   final int rank;
   final TrendItem trend;
+  final bool isLatest;
   final VoidCallback? onTapOverride;
 
   const _NewsListRow({
     super.key,
     required this.rank,
     required this.trend,
+    this.isLatest = false,
     this.onTapOverride,
   });
 
@@ -3769,6 +3772,16 @@ class _NewsListRowState extends State<_NewsListRow> {
                         runSpacing: 6,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
+                          if (widget.isLatest)
+                            Container(
+                              width: 6,
+                              height: 6,
+                              margin: const EdgeInsets.only(right: 1),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF2563EB),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
                           _CategoryBadge(
                             category: chipLabel,
                             color: rankAccent,
@@ -3779,7 +3792,9 @@ class _NewsListRowState extends State<_NewsListRow> {
                             publishedLabel.isEmpty ? '방금 전' : publishedLabel,
                             style: TextStyle(
                               fontSize: 10.5,
-                              color: secondaryText,
+                              color: widget.isLatest
+                                  ? const Color(0xFF2563EB)
+                                  : secondaryText,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
