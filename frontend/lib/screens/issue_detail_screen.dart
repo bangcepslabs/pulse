@@ -32,6 +32,11 @@ class IssueDetailScreen extends StatelessWidget {
           isDark ? const Color(0xFF0B1220) : const Color(0xFFF5F7FB),
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: '뒤로 가기',
+          onPressed: () => Navigator.of(context).maybePop(),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
         titleSpacing: 20,
         title: Text(
           '이슈 상세',
@@ -200,21 +205,33 @@ class IssueDetailScreen extends StatelessWidget {
                     ),
                   )
                 else
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(
-                      isDesktop ? 0 : 20,
-                      0,
-                      isDesktop ? 0 : 20,
-                      28,
-                    ),
-                    sliver: SliverList.separated(
-                      itemCount: articles.length,
-                      separatorBuilder: (_, __) =>
-                          Divider(color: border, height: 1),
-                      itemBuilder: (context, index) => _IssueDetailArticleRow(
-                        item: articles[index],
-                        foreground: foreground,
-                        muted: muted,
+                  SliverToBoxAdapter(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 920),
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            isDesktop ? 0 : 20,
+                            0,
+                            isDesktop ? 0 : 20,
+                            28,
+                          ),
+                          child: Column(
+                            children: [
+                              for (var index = 0;
+                                  index < articles.length;
+                                  index++) ...[
+                                _IssueDetailArticleRow(
+                                  item: articles[index],
+                                  foreground: foreground,
+                                  muted: muted,
+                                ),
+                                if (index < articles.length - 1)
+                                  Divider(color: border, height: 1),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
