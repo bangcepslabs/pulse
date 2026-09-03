@@ -100,55 +100,42 @@ class IssueDetailScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _IssueDetailMeta(
+                            _IssueDetailHero(
+                              title: title,
                               category: issue.category,
                               time: _issueDetailTimeLabel(issue.lastSeenAt),
+                              articleCount: issue.articleCount,
+                              sourceCount: issue.sourceCount,
+                              imageUrl: imageUrl,
+                              foreground: foreground,
                               muted: muted,
+                              isDark: isDark,
+                              isDesktop: isDesktop,
                             ),
-                            const SizedBox(height: 10),
-                            Text(
-                              title.isEmpty ? '주요 이슈' : title,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: foreground,
-                                fontSize: isDesktop ? 34 : 24,
-                                height: isDesktop ? 1.18 : 1.28,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if (imageUrl.isNotEmpty) ...[
-                              const SizedBox(height: 18),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: AspectRatio(
-                                  aspectRatio: 16 / 9,
-                                  child: NetworkThumbnail(
-                                    imageUrl: imageUrl,
-                                    fit: BoxFit.cover,
-                                    loadingWidget: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        color: isDark
-                                            ? const Color(0xFF1F2937)
-                                            : const Color(0xFFF1F5F9),
-                                      ),
-                                    ),
-                                    errorWidget: const SizedBox.shrink(),
-                                  ),
-                                ),
-                              ),
-                            ],
                             if (summary != null) ...[
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 28),
                               _IssueDetailHeading(
                                   title: '무슨 일이 있었나', color: foreground),
                               const SizedBox(height: 10),
-                              Text(
-                                summary,
-                                style: TextStyle(
-                                  color: foreground,
-                                  fontSize: isDesktop ? 16 : 15,
-                                  height: 1.65,
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.fromLTRB(14, 2, 8, 2),
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    left: BorderSide(
+                                      color: const Color(0xFF2563EB)
+                                          .withValues(alpha: isDark ? .8 : .55),
+                                      width: 3,
+                                    ),
+                                  ),
+                                ),
+                                child: Text(
+                                  summary,
+                                  style: TextStyle(
+                                    color: foreground,
+                                    fontSize: isDesktop ? 16 : 15,
+                                    height: 1.65,
+                                  ),
                                 ),
                               ),
                             ],
@@ -244,6 +231,111 @@ class IssueDetailScreen extends StatelessWidget {
   }
 }
 
+class _IssueDetailHero extends StatelessWidget {
+  final String title;
+  final String category;
+  final String time;
+  final int articleCount;
+  final int sourceCount;
+  final String imageUrl;
+  final Color foreground;
+  final Color muted;
+  final bool isDark;
+  final bool isDesktop;
+
+  const _IssueDetailHero({
+    required this.title,
+    required this.category,
+    required this.time,
+    required this.articleCount,
+    required this.sourceCount,
+    required this.imageUrl,
+    required this.foreground,
+    required this.muted,
+    required this.isDark,
+    required this.isDesktop,
+  });
+
+  Widget _image() => ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: isDesktop ? 1.55 : 16 / 9,
+          child: NetworkThumbnail(
+            imageUrl: imageUrl,
+            fit: BoxFit.cover,
+            loadingWidget: DecoratedBox(
+              decoration: BoxDecoration(
+                color:
+                    isDark ? const Color(0xFF1F2937) : const Color(0xFFEFF3F8),
+              ),
+            ),
+            errorWidget: const SizedBox.shrink(),
+          ),
+        ),
+      );
+
+  Widget _copy() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _IssueDetailMeta(
+            category: category,
+            time: time,
+            muted: muted,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            title.isEmpty ? '주요 이슈' : title,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: foreground,
+              fontSize: isDesktop ? 32 : 24,
+              height: isDesktop ? 1.2 : 1.28,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.4,
+            ),
+          ),
+          if (articleCount > 0 || sourceCount > 0) ...[
+            const SizedBox(height: 14),
+            Text(
+              '관련 기사 $articleCount · 출처 $sourceCount',
+              style: TextStyle(
+                color: muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (isDesktop && imageUrl.isNotEmpty) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 410, child: _image()),
+          const SizedBox(width: 28),
+          Expanded(
+              child: Padding(
+                  padding: const EdgeInsets.only(top: 8), child: _copy())),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _copy(),
+        if (imageUrl.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          _image(),
+        ],
+      ],
+    );
+  }
+}
+
 class _IssueDetailMeta extends StatelessWidget {
   final String category;
   final String time;
@@ -313,6 +405,15 @@ class _IssueDetailTimelineRow extends StatelessWidget {
               _issueTimelineClockLabel(event.occurredAt),
               style: TextStyle(
                   color: muted, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          Container(
+            width: 7,
+            height: 7,
+            margin: const EdgeInsets.only(top: 5, right: 12),
+            decoration: const BoxDecoration(
+              color: Color(0xFF2563EB),
+              shape: BoxShape.circle,
             ),
           ),
           Expanded(
