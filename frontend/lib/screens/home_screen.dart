@@ -854,21 +854,13 @@ class _HomeScreenState extends State<HomeScreen>
     final secondaryText =
         isDark ? Colors.grey.shade300 : Colors.blueGrey.shade500;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: border),
-          boxShadow: [
-            BoxShadow(
-              color: isDark
-                  ? Colors.black.withOpacity(0.22)
-                  : Colors.black.withOpacity(0.025),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: const [],
         ),
         child: Padding(
           padding: const EdgeInsets.all(13),
@@ -946,7 +938,7 @@ class _HomeScreenState extends State<HomeScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '전체 뉴스',
+                  '최신 뉴스',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
@@ -3703,7 +3695,6 @@ class _NewsListRowState extends State<_NewsListRow> {
     final publisher = _sourceDisplayName(widget.trend);
     final chipLabel =
         widget.trend.category.isEmpty ? '일반' : widget.trend.category;
-    final isTop = widget.rank <= 3;
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: isCompact ? 10 : 16),
@@ -3740,23 +3731,18 @@ class _NewsListRowState extends State<_NewsListRow> {
                   child: Align(
                     alignment: Alignment.topLeft,
                     child: Container(
-                      width: isCompact ? 22 : 24,
-                      height: isCompact ? 22 : 24,
+                      width: isCompact ? 18 : 20,
+                      height: isCompact ? 18 : 20,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: isTop
-                            ? (isDark
-                                ? const Color(0xFF172554)
-                                : const Color(0xFFEEF4FF))
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(999),
+                        color: Colors.transparent,
                       ),
                       child: Text(
                         '${widget.rank}',
                         style: TextStyle(
                           color: rankAccent,
-                          fontSize: isCompact ? 11 : 12,
-                          fontWeight: FontWeight.w900,
+                          fontSize: isCompact ? 10 : 10.5,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
