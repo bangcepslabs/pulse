@@ -172,7 +172,6 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    console.log('=== Cron job started at', new Date().toISOString(), '===');
 
     if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY || !env.SUPABASE_SERVICE_ROLE_KEY || !env.NAVER_CLIENT_ID || !env.NAVER_CLIENT_SECRET) {
       console.error('Missing required environment variables!');
@@ -181,7 +180,6 @@ export default {
 
     try {
       const result = await runNewsCollectionCycle(env);
-      console.log('=== Cron job completed ===\nResult:', JSON.stringify(result));
     } catch (error) {
       console.error('Cron job failed:', error.message);
     }
@@ -944,7 +942,6 @@ async function handleGetNewsByKeyword(url, env, corsHeaders) {
 }
 
 async function handleTriggerCollection(request, env, corsHeaders) {
-  console.log('=== Manual trigger requested ===');
 
   if (!env.SCHEDULER_SECRET) {
     console.error('Missing SCHEDULER_SECRET');
@@ -992,7 +989,6 @@ async function runNewsCollectionCycle(env) {
   // cluster IDs associated with their tracked issue snapshots.
   if (analysis.ran) {
     issueTimeline = await refreshIssueTimeline(env);
-    console.log('=== Issue timeline refreshed ===\nResult:', JSON.stringify(issueTimeline));
   }
 
   return { collection, analysis, issueTimeline };
@@ -1010,7 +1006,6 @@ async function collectAllNews(env) {
     : MAX_SEARCH_TERMS_PER_RUN;
   const searchTerms = pickSearchTermsForThisRun(allSearchTerms, now, searchTermCount);
 
-  console.log(`Processing category[${categoryIndex + 1}/${categories.length}]: ${currentCategory} `);
 
   let totalFetched = 0;
   let totalCandidates = 0;
@@ -1047,10 +1042,8 @@ async function collectAllNews(env) {
 
     totalFetched = articles.length;
 
-    console.log(`Fetched ${articles.length} unique candidate articles for ${currentCategory}`);
 
     if (articles.length === 0) {
-      console.warn(`No articles found for ${currentCategory}.Search terms: ${searchTerms.join(', ')} `);
 
       return {
         category: currentCategory,
@@ -1079,7 +1072,6 @@ async function collectAllNews(env) {
 
     totalCandidates = articles.length;
 
-    console.log(`After DB duplicate filter: ${articles.length} candidates / ${totalSkippedExisting} existing skipped`);
 
     if (articles.length === 0) {
       return {
@@ -1098,10 +1090,8 @@ async function collectAllNews(env) {
       .filter(Boolean);
     totalPreFilterDiscarded = articles.length - preparedCandidates.length;
     totalQueued = await insertNewsCandidates(preparedCandidates, env);
-    console.log(`Candidate queue: ${totalQueued} inserted / ${totalPreFilterDiscarded} hard-skipped`);
 
     if (categoryIndex === 0) {
-      console.log('Running 7-day cleanup...');
       await cleanupOldTrends(env, 7);
     }
   } catch (error) {
@@ -1124,7 +1114,6 @@ function buildNewsCandidate(article) {
   const preFilter = scoreNewsCandidate(article);
 
   if (preFilter.hardSkip) {
-    console.log(`  ⏭️ Candidate hard-skip (${preFilter.reason}): ${article.title.slice(0, 50)}`);
     return null;
   }
 
@@ -1219,7 +1208,6 @@ function isAiAnalysisCycle(now = new Date()) {
 
 async function processPendingCandidate(env) {
   if (!isAiAnalysisCycle()) {
-    console.log(`AI cycle skipped: runs every ${AI_ANALYSIS_INTERVAL_MINUTES} minutes`);
     return { ran: false, totalAnalyzed: 0, totalInserted: 0, reason: 'Not an AI cycle' };
   }
 
@@ -1235,12 +1223,10 @@ async function processPendingCandidate(env) {
   const selected = ranked.slice(0, MAX_AI_ANALYSIS_PER_CYCLE).map(item => item.candidate);
 
   if (!selected.length) {
-    console.log('AI cycle: no pending candidates');
     return { ran: true, totalAnalyzed: 0, totalInserted: 0, pendingRemaining: 0 };
   }
 
   const candidate = selected[0];
-  console.log(`AI cycle: selected candidate #${candidate.id} (preScore ${candidate.pre_score}, attempts ${candidate.attempts})`);
 
   try {
     const analyzed = await analyzeSingleArticle({
@@ -1257,7 +1243,6 @@ async function processPendingCandidate(env) {
         processed_at: new Date().toISOString(),
         last_error: null,
       }, env);
-      console.log(`AI cycle: discarded low-value candidate #${candidate.id}`);
       return { ran: true, totalAnalyzed: 1, totalInserted: 0, discarded: 1 };
     }
 
@@ -1270,7 +1255,6 @@ async function processPendingCandidate(env) {
       processed_at: new Date().toISOString(),
       last_error: null,
     }, env);
-    console.log(`Successfully inserted ${inserted} new trends`);
     return { ran: true, totalAnalyzed: 1, totalInserted: inserted, processed: 1 };
   } catch (error) {
     const attempts = Number(candidate.attempts || 0) + 1;
@@ -1311,7 +1295,6 @@ async function fetchNaverNews(query, env, limit) {
 
     const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(query)}&display=${displayCount}&sort=date`;
 
-    console.log(`  🔍 네이버 API 호출: ${query}`);
 
     const response = await fetch(url, {
       headers: {
@@ -1329,7 +1312,6 @@ async function fetchNaverNews(query, env, limit) {
     }
 
     const data = await response.json();
-    console.log(`  📊 네이버 API 응답: ${data.items?.length || 0}개 기사`);
 
     const now = Date.now();
     const minTimestamp = now - (MAX_ARTICLE_AGE_HOURS * 60 * 60 * 1000);
@@ -1360,12 +1342,10 @@ async function fetchNaverNews(query, env, limit) {
       .filter(article => {
         if (article.pubTimestamp <= minTimestamp) {
           const hoursAgo = Math.floor((now - article.pubTimestamp) / (60 * 60 * 1000));
-          console.log(`  ⏭️ Filtered (${hoursAgo}h old): ${article.title.slice(0, 40)}`);
           return false;
         }
 
         if (article.description.length < 20) {
-          console.log(`  ⏭️ Filtered (Too short): ${article.title.slice(0, 40)}`);
           return false;
         }
 
@@ -1374,7 +1354,6 @@ async function fetchNaverNews(query, env, limit) {
       .sort((a, b) => b.pubTimestamp - a.pubTimestamp)
       .slice(0, limit);
 
-    console.log(`  ✅ 필터링 완료: ${filtered.length}개 기사 (최근 ${MAX_ARTICLE_AGE_HOURS}시간 이내)`);
 
     return filtered;
   } catch (error) {
@@ -1508,7 +1487,6 @@ Classify category independently by the article subject: economy covers finance, 
 
   const correctedCategory = correctArticleCategory(finalCategory, titleAndDesc);
   if (correctedCategory !== finalCategory) {
-    console.log(`  ↪️ Category corrected: ${finalCategory} -> ${correctedCategory}: ${safeTitle.slice(0, 40)}`);
     finalCategory = correctedCategory;
   }
 
@@ -1516,7 +1494,6 @@ Classify category independently by the article subject: economy covers finance, 
     const nonEconomicKeywords = ['교회', '목사', '신부', '전도', '예배', '교인', '성경', '종교'];
 
     if (nonEconomicKeywords.some(kw => titleAndDesc.includes(kw))) {
-      console.warn(`  ⚠️ Recategorized to 사회 (Religion detected): ${safeTitle.slice(0, 20)}`);
       finalCategory = '사회';
       importanceScore = 1;
     }
@@ -1530,7 +1507,6 @@ Classify category independently by the article subject: economy covers finance, 
     ? importanceScore <= 2
     : importanceScore <= 2 && mainWorthiness <= 2;
   if (shouldDropForLowValue) {
-    console.log(`  🗑️ Dropped (importance ${importanceScore}, main ${mainWorthiness ?? 'unknown'}): ${safeTitle.slice(0, 30)}`);
     return null;
   }
 
@@ -1584,7 +1560,6 @@ async function insertTrends(trends, env) {
       return true;
     });
 
-    console.log(`  📊 Ready to insert: ${newTrends.length} new / ${skipped} duplicates`);
 
     if (newTrends.length === 0) return 0;
 
@@ -1886,10 +1861,6 @@ async function refreshIssueTimeline(env) {
   if (mappingInsert.error) {
     throw new Error(mappingInsert.error.message || 'Failed to insert issue cluster mappings');
   }
-  console.log('[Issue diagnostics] mapping persisted', JSON.stringify({
-    expected: mappingRows.length,
-    returned: Array.isArray(mappingInsert.data) ? mappingInsert.data.length : null,
-  }));
   if (mappingRows.length > 0 && Array.isArray(mappingInsert.data) && mappingInsert.data.length !== mappingRows.length) {
     throw new Error(`Issue cluster mapping count mismatch: expected ${mappingRows.length}, received ${mappingInsert.data.length}`);
   }
@@ -2045,7 +2016,6 @@ async function syncTrackedIssues(clusterRows, mappingRows, trends, env) {
 
     if (trackedIssue) {
       result.matched += 1;
-      console.log(`Tracked issue matched by ${match.reason}: trackedIssue=${trackedIssue.id}`);
     } else {
       const issueTitle = await resolveTrackedIssueTitle(
         null,
@@ -2056,7 +2026,6 @@ async function syncTrackedIssues(clusterRows, mappingRows, trends, env) {
       trackedIssue = await createTrackedIssue(cluster, issueTitle, env);
       existingIssues.push(trackedIssue);
       result.created += 1;
-      console.log(`Created new tracked candidate: trackedIssue=${trackedIssue.id}`);
     }
 
     const issueTitle = await resolveTrackedIssueTitle(
@@ -2080,7 +2049,6 @@ async function syncTrackedIssues(clusterRows, mappingRows, trends, env) {
         env,
       );
       result.snapshotsSkipped += 1;
-      console.log(`Tracked snapshot unchanged - skipped: trackedIssue=${trackedIssue.id}`);
       continue;
     }
 
@@ -2090,7 +2058,6 @@ async function syncTrackedIssues(clusterRows, mappingRows, trends, env) {
     const snapshotInserted = await insertTrackedIssueSnapshot(snapshot, env);
     if (!snapshotInserted) {
       result.snapshotsSkipped += 1;
-      console.log(`Tracked snapshot duplicate - skipped: trackedIssue=${trackedIssue.id}`);
       continue;
     }
     latestSnapshots.set(trackedIssueKey, snapshot);
@@ -2100,11 +2067,7 @@ async function syncTrackedIssues(clusterRows, mappingRows, trends, env) {
     if (activation.shouldPromote) {
       trackedIssue.status = 'active';
       result.activated += 1;
-      console.log(
-        `Tracked candidate promoted to active: trackedIssue=${trackedIssue.id} newArticles=${activation.newNewsIds.length} waveGapMinutes=${activation.waveGapMinutes}`
-      );
     } else if (String(trackedIssue.status || '') === 'candidate') {
-      console.log(`Tracked candidate remains candidate: trackedIssue=${trackedIssue.id} reason=${activation.reason}`);
     }
     result.snapshotsAdded += 1;
   }
@@ -2341,32 +2304,15 @@ async function resolveTrackedIssueTitle(trackedIssue, cluster, env, budget) {
   const existingTitle = String(trackedIssue?.issue_title || '').trim();
   if (!needsIssueTitleRefresh(existingTitle)) return existingTitle;
   if (!env.GROQ_API_KEY) {
-    console.log('[Issue title] skipped: missing GROQ_API_KEY');
     return '';
   }
   if (budget.remaining <= 0) {
-    console.log('[Issue title] skipped: cycle budget exhausted', JSON.stringify({
-      trackedIssueId: trackedIssue?.id || null,
-      clusterScore: cluster?.score || 0,
-    }));
     return '';
   }
 
   budget.remaining -= 1;
-  console.log('[Issue title] generation started', JSON.stringify({
-    trackedIssueId: trackedIssue?.id || null,
-    clusterId: cluster?.issueClusterId || null,
-    clusterScore: cluster?.score || 0,
-    previousTitle: existingTitle || null,
-    remainingBudget: budget.remaining,
-  }));
   try {
     const generatedTitle = await generateIssueTitle(cluster, env);
-    console.log('[Issue title] generation completed', JSON.stringify({
-      trackedIssueId: trackedIssue?.id || null,
-      clusterId: cluster?.issueClusterId || null,
-      generatedTitle: generatedTitle || null,
-    }));
     return generatedTitle;
   } catch (error) {
     console.error('[Issue title] generation failed', JSON.stringify({
