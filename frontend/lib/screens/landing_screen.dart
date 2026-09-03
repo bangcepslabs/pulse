@@ -441,13 +441,17 @@ class _LandingScreenState extends State<LandingScreen>
                         ),
                         KeyedSubtree(
                           key: _updatesSectionKey,
-                          child: _buildHomeLivePreview(isMobile),
+                          child: RepaintBoundary(
+                            child: _buildHomeLivePreview(isMobile),
+                          ),
                         ),
                         KeyedSubtree(
                           key: _marketSectionKey,
-                          child: _FadeInOnScroll(
-                            delay: 80,
-                            child: _buildHomeMarketSummary(isMobile),
+                          child: RepaintBoundary(
+                            child: _FadeInOnScroll(
+                              delay: 80,
+                              child: _buildHomeMarketSummary(isMobile),
+                            ),
                           ),
                         ),
                       ],
