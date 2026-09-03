@@ -445,7 +445,10 @@ class _LandingScreenState extends State<LandingScreen>
                         ),
                         KeyedSubtree(
                           key: _marketSectionKey,
-                          child: _buildHomeMarketSummary(isMobile),
+                          child: _FadeInOnScroll(
+                            delay: 80,
+                            child: _buildHomeMarketSummary(isMobile),
+                          ),
                         ),
                       ],
                     ),
@@ -10463,14 +10466,30 @@ class _HomeMarketValue extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  _landingMarketPriceLabel(quote),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: foreground,
-                      fontSize: isMobile ? 14 : 15,
-                      fontWeight: FontWeight.w700),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 280),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, .12),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: Text(
+                    _landingMarketPriceLabel(quote),
+                    key: ValueKey(_landingMarketPriceLabel(quote)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: foreground,
+                        fontSize: isMobile ? 14 : 15,
+                        fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
               const SizedBox(width: 5),
